@@ -1,3 +1,3 @@
-## Simple Federated Continual Pipeline 
+## AutoFL
 
-This is for Image Classification using Flower and Avalanche
+#### Phase 1 -> Simple Federated Continual Learning 
