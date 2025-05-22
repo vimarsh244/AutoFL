@@ -1,3 +1,4 @@
+import torch
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 from avalanche.evaluation.metrics import (
@@ -13,6 +14,8 @@ from avalanche.logging import InteractiveLogger, TextLogger, TensorboardLogger, 
 from avalanche.training.plugins import EvaluationPlugin
 
 from avalanche.training.supervised import Naive
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
 
@@ -37,5 +40,6 @@ def make_cl_strat(net):
     cl_strategy = Naive(
         net, Adam(net.parameters()),
         CrossEntropyLoss(), train_mb_size=32, train_epochs=1, eval_mb_size=32,
-        evaluator=eval_plugin)
+        evaluator=eval_plugin,
+        )
     return cl_strategy, eval_plugin

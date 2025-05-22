@@ -17,7 +17,7 @@ from flwr.common import Metrics, Context
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 32
-NUM_CLIENTS = 10
+NUM_CLIENTS = 5
 
 class FlowerClient(NumPyClient):
     def __init__(self, net, benchmark, trainloader_len, testloader_len):
@@ -40,9 +40,9 @@ class FlowerClient(NumPyClient):
 
             cl_strategy, evaluation = make_cl_strat(self.net)
             res = cl_strategy.train(experience)
-            print('Training completed')
+            print('Training completed: ', experience.current_experience)
            ## train(self.net, self.trainloader, epochs=1)
-        return get_parameters(self.net), trainloader_len, {}
+        return get_parameters(self.net), self.trainloader_len, {}
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)
@@ -50,14 +50,16 @@ class FlowerClient(NumPyClient):
         results = []
         for experience in self.benchmark.train_stream:
             print("Computing acc on whole test set")
-            results.append(cl_strategy.eval(benchmark.test_stream))
+            results.append(cl_strategy.eval(self.benchmark.test_stream))
+
+        print("Results Eval for Client: ", results)
 
             
 ##        loss, accuracy = test(self.net, self.valloader)
-        loss = evaluation.get_last_metric("Top1_Acc_Stream")
-        accuracy = evaluation.get_last_metric("Loss_Stream")
+        accuracy = evaluation.get_last_metric("Top1_Acc_Stream")
+        loss = evaluation.get_last_metric("Loss_Stream")
 
-        return float(loss), testloader_len, {"accuracy": float(accuracy)}
+        return float(loss), self.testloader_len, {"accuracy": float(accuracy)}
 
 
 def client_fn(context: Context) -> Client:

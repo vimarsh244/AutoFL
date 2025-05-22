@@ -24,7 +24,7 @@ def main():
     run_simulation(
         server_app = server,
         client_app = client,
-        num_supernodes = 10,
+        num_supernodes = 5,
         backend_config = backend_config,
     )
 

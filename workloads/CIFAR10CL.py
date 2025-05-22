@@ -11,6 +11,18 @@ from avalanche.benchmarks.utils.data import make_avalanche_dataset
 import flwr
 from flwr_datasets import FederatedDataset
 
+class TupleDataset(torch.utils.data.Dataset):
+    def __init__(self, hf_dataset):
+        self.dataset = hf_dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        return sample["img"], sample["label"]
+
+
  
 def load_datasets(partition_id: int):
     fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
@@ -43,5 +55,5 @@ def load_datasets(partition_id: int):
     valloader = DataLoader(partition_train_test["test"], batch_size=BATCH_SIZE)
     testset = fds.load_split("test").with_transform(apply_transforms)
     testloader = DataLoader(testset, batch_size=BATCH_SIZE)
-    return partition_train_test["train"], partition_train_test["test"]
+    return TupleDataset(partition_train_test["train"]), TupleDataset(partition_train_test["test"])
 #    return train_CIFAR, test_CIFAR
