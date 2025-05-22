@@ -52,12 +52,15 @@ class FlowerClient(NumPyClient):
             print("Computing acc on whole test set")
             results.append(cl_strategy.eval(self.benchmark.test_stream))
 
-        print("Results Eval for Client: ", results)
-
             
 ##        loss, accuracy = test(self.net, self.valloader)
-        accuracy = evaluation.get_last_metric("Top1_Acc_Stream")
-        loss = evaluation.get_last_metric("Loss_Stream")
+        last_metrics = evaluation.get_last_metrics()
+        loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
+        accuracy = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+
+        print("Eval of Client: ")
+        print("Loss: ", loss)
+        print("Acc: ", accuracy)
 
         return float(loss), self.testloader_len, {"accuracy": float(accuracy)}
 
@@ -97,6 +100,10 @@ def client_fn(context: Context) -> Client:
 
     print(type(ava_train))
     benchmark = benchmark_from_datasets(train=ava_train, test=ava_test)
+
+    # Print ClientID
+
+    print("ClientID: ", context.node_config["partition-id"])
 
 
     # Create a single Flower client representing a single organization
