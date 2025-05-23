@@ -1,4 +1,4 @@
-NUM_CLIENTS = 10
+NUM_CLIENTS = 5
 BATCH_SIZE = 32
 
 import torch
