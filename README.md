@@ -2,9 +2,10 @@
 
 #### Phase 1 -> Simple Federated Continual Learning 
 
-1. Implement FL with Flower
-2. Understand how CL can work on each client
-3. Setup Individual client CL with Avalanche
-4. Integrate Avalanche with Flower
-5. Make robust evaluation metrics and logging
-6. Centralize Configuration
+- [x] Implement FL with Flower
+- [x] Understand how CL can work on each client
+- [x] Setup Individual client CL with Avalanche
+- [x] Integrate Avalanche with Flower 
+- [ ] Basic Tests to ensure successful integration --> Current 
+- [ ] Make robust evaluation metrics and logging
+- [ ] Centralize Configuration
