@@ -14,8 +14,8 @@
     - [ ]  Add CL Strats → Buffer Replay, EWC, Hybrid
     - [ ]  Add provisions for NIID
 - [ ]  Make robust evaluation metrics and logging
-    - [ ]  Currently we are just printing and logging cl metrics of each experience and stream and then the final aggregate metrics for FL
-    - [ ]  Understanding which FL and CL metrics are required
+    - [x]  Currently we are just printing and logging cl metrics of each experience and stream and then the final aggregate metrics for FL
+    - [x]  Understanding which FL and CL metrics are required
     - [ ]  Integrating and Logging using WandB
     - [ ]  Provision for local backup → not really  necessary immediately
 - [ ]  Centralize Configuration
