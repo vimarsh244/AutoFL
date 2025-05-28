@@ -25,6 +25,7 @@ class FlowerClient(NumPyClient):
         self.benchmark = benchmark
         self.trainloader_len = trainloader_len
         self.testloader_len = testloader_len
+        self.cl_strategy, self.evaluation = make_cl_strat(net) 
 
     def get_parameters(self, config):
         return get_parameters(self.net)
@@ -41,22 +42,21 @@ class FlowerClient(NumPyClient):
 
             # train returns a dictionary which contains all the metric values
 
-            cl_strategy, evaluation = make_cl_strat(self.net)
-            res = cl_strategy.train(experience)
+            res = self.cl_strategy.train(experience)
             print('Training completed: ', experience.current_experience)
            ## train(self.net, self.trainloader, epochs=1)
             print("Computing Accuracy on Test for exp:", experience.current_experience)
-            results_stream_dict.append(cl_strategy.eval(self.benchmark.test_stream))
+            results_stream_dict.append(self.cl_strategy.eval(self.benchmark.test_stream))
 
         print('--------------------------------RES_TRAIN----------------------------------')
         print(res)
         print('-------------------------------RES_STREAM_EVAL-----------------------------')
         print(results_stream_dict)
         print('-------------------------------GET_ALL_METRICS-----------------------------')
-        results_get_all = evaluation.get_all_metrics()
+        results_get_all = self.evaluation.get_all_metrics()
         print(results_get_all)
         print('---------------------------------LAST_METRICS------------------------------')
-        results_stream = evaluation.get_last_metrics()
+        results_stream = self.evaluation.get_last_metrics()
         print(results_stream)
         confusion_matrix = results_stream["ConfusionMatrix_Stream/eval_phase/test_stream"]
         forgetting_measure = results_stream["StreamForgetting/eval_phase/test_stream"]
@@ -64,7 +64,7 @@ class FlowerClient(NumPyClient):
         stream_acc = results_stream["Top1_Acc_Stream/eval_phase/test_stream"]
         stream_disc_usage = results_stream["DiskUsage_Stream/eval_phase/test_stream"]
         fit_dict_return = {
-                "confusion_matrix": confusion_matrix.tolist(),
+#                "confusion_matrix": confusion_matrix.tolist(),
                 "forgetting_measure":  float(forgetting_measure),
                 "stream_loss":  float(stream_loss),
                 "stream_acc":  float(stream_acc),
@@ -90,7 +90,7 @@ class FlowerClient(NumPyClient):
         print("Loss: ", loss)
         print("Acc: ", accuracy)
 
-        return float(loss), self.testloader_len, {"accuracy": float(accuracy)}
+        return float(loss), self.testloader_len, {"accuracy": float(accuracy), "loss": float(loss)}
 
 
 def client_fn(context: Context) -> Client:
@@ -136,7 +136,7 @@ def client_fn(context: Context) -> Client:
 
     # Print ClientID
 
-    print("------------------------------------------------ClientID: ", partition_id)
+    print("------------------------------------------------ClientID: ", partition_id, "----------------------------------------------")
 
 
     # Create a single Flower client representing a single organization
