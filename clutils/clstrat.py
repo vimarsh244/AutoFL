@@ -39,7 +39,8 @@ def make_cl_strat(net):
 
     cl_strategy = Naive(
         net, Adam(net.parameters()),
-        CrossEntropyLoss(), train_mb_size=32, train_epochs=1, eval_mb_size=32,
+        CrossEntropyLoss(), train_mb_size=32, train_epochs=3, eval_mb_size=32,
         evaluator=eval_plugin,
+        device=DEVICE
         )
     return cl_strategy, eval_plugin

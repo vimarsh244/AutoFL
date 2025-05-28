@@ -5,7 +5,7 @@ from flwr.client import ClientApp
 from flwr.server import ServerApp
 
 from clientCL import client_fn
-from server import server_fn
+from clserver import server_fn
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

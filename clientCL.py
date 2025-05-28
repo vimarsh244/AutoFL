@@ -32,7 +32,10 @@ class FlowerClient(NumPyClient):
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
             # TRAINING LOOP
+        print("for client config:")
+        print(config)
         print('Starting experiment...')
+        results_stream_dict = []
         for experience in self.benchmark.train_stream:
             print("Start of experience: ", experience.current_experience)
 
@@ -42,17 +45,42 @@ class FlowerClient(NumPyClient):
             res = cl_strategy.train(experience)
             print('Training completed: ', experience.current_experience)
            ## train(self.net, self.trainloader, epochs=1)
-        return get_parameters(self.net), self.trainloader_len, {}
+            print("Computing Accuracy on Test for exp:", experience.current_experience)
+            results_stream_dict.append(cl_strategy.eval(self.benchmark.test_stream))
+
+        print('--------------------------------RES_TRAIN----------------------------------')
+        print(res)
+        print('-------------------------------RES_STREAM_EVAL-----------------------------')
+        print(results_stream_dict)
+        print('-------------------------------GET_ALL_METRICS-----------------------------')
+        results_get_all = evaluation.get_all_metrics()
+        print(results_get_all)
+        print('---------------------------------LAST_METRICS------------------------------')
+        results_stream = evaluation.get_last_metrics()
+        print(results_stream)
+        confusion_matrix = results_stream["ConfusionMatrix_Stream/eval_phase/test_stream"]
+        forgetting_measure = results_stream["StreamForgetting/eval_phase/test_stream"]
+        stream_loss = results_stream["Loss_Stream/eval_phase/test_stream"]
+        stream_acc = results_stream["Top1_Acc_Stream/eval_phase/test_stream"]
+        stream_disc_usage = results_stream["DiskUsage_Stream/eval_phase/test_stream"]
+        fit_dict_return = {
+                "confusion_matrix": confusion_matrix.tolist(),
+                "forgetting_measure":  float(forgetting_measure),
+                "stream_loss":  float(stream_loss),
+                "stream_acc":  float(stream_acc),
+                "stream_disc_usage":  float(stream_disc_usage)
+            }
+        print("----------------------------CLIENT_INFO--------------------------------")
+        print(fit_dict_return)
+        print('-----------------------------------------------------------------------')
+        return get_parameters(self.net), self.trainloader_len, fit_dict_return
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)
         cl_strategy, evaluation = make_cl_strat(self.net)
         results = []
-        for experience in self.benchmark.train_stream:
-            print("Computing acc on whole test set")
-            results.append(cl_strategy.eval(self.benchmark.test_stream))
-
-            
+        print("------------------------Evaluating Client for Server on Updated Global Model on Test Set--------------------")
+        results.append(cl_strategy.eval(self.benchmark.test_stream))
 ##        loss, accuracy = test(self.net, self.valloader)
         last_metrics = evaluation.get_last_metrics()
         loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
@@ -77,7 +105,7 @@ def client_fn(context: Context) -> Client:
     # Read the node_config to fetch data partition associated to this node
     partition_id = context.node_config["partition-id"]
     train_data, test_data = load_datasets(partition_id=partition_id)
-    print(type(train_data))
+#    print(type(train_data))
     total_train_samples = len(train_data)
     total_eval_samples = len(test_data)
     trainloader_len = total_train_samples//BATCH_SIZE
@@ -90,20 +118,25 @@ def client_fn(context: Context) -> Client:
     test_experiences = split_dataset(test_data, n_experiences)  # optional
     ava_train = []
     ava_test = []
-    ava_test.append(as_avalanche_dataset(test_data))
+#    ava_test.append(as_avalanche_dataset(test_data))
     for exp in train_experiences:
         ava_exp = as_avalanche_dataset(exp)
-        print(type(ava_exp))
+#        print(type(ava_exp))
         ava_train.append(exp)
+
+#    Provision for Splitting Test Stream 
+
+    for exp in test_experiences:
+        ava_exp = as_avalanche_dataset(exp)
+        ava_test.append(exp)
 
     # Creating Bencmarks -> using Entire testdata for eval -> have to check difference
 
-    print(type(ava_train))
     benchmark = benchmark_from_datasets(train=ava_train, test=ava_test)
 
     # Print ClientID
 
-    print("ClientID: ", context.node_config["partition-id"])
+    print("------------------------------------------------ClientID: ", partition_id)
 
 
     # Create a single Flower client representing a single organization
