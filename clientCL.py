@@ -5,6 +5,8 @@ from workloads.CIFAR10CL import load_datasets
 from clutils.make_experiences import split_dataset
 from clutils.clstrat import make_cl_strat 
 
+import json
+
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
 from avalanche.benchmarks.utils.data import make_avalanche_dataset
@@ -52,9 +54,9 @@ class FlowerClient(NumPyClient):
         print(res)
         print('-------------------------------RES_STREAM_EVAL-----------------------------')
         print(results_stream_dict)
-        print('-------------------------------GET_ALL_METRICS-----------------------------')
-        results_get_all = self.evaluation.get_all_metrics()
-        print(results_get_all)
+#        print('-------------------------------GET_ALL_METRICS-----------------------------')
+#        results_get_all = self.evaluation.get_all_metrics()
+#        print(results_get_all)
         print('---------------------------------LAST_METRICS------------------------------')
         results_stream = self.evaluation.get_last_metrics()
         print(results_stream)
@@ -85,12 +87,22 @@ class FlowerClient(NumPyClient):
         last_metrics = evaluation.get_last_metrics()
         loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
         accuracy = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+        print("Results of Eval for GCF----------------------------------------------------------------")
+        print(results)
+        exp_acc = []
+        for res in results:
+            for exp, acc in res.items():
+                if exp.startswith("Top1_Acc_Exp/"):
+                    exp_acc.append(float(acc))
+                    
+
 
         print("Eval of Client: ")
         print("Loss: ", loss)
         print("Acc: ", accuracy)
+        print("Per Exp Acc: ", exp_acc)
 
-        return float(loss), self.testloader_len, {"accuracy": float(accuracy), "loss": float(loss)}
+        return float(loss), self.testloader_len, {"accuracy": float(accuracy), "loss": float(loss), "ExpAccuracy": json.dumps(exp_acc)}
 
 
 def client_fn(context: Context) -> Client:
