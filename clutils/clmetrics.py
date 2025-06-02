@@ -49,7 +49,7 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     latest_wexpacc = wexpacc_byround[-1]
 
     for i, w in enumerate(wexpacc_byround):
-        gcf_per_exp_running[i] = wexpacc_byround[i][i] - latest_wepacc[i]
+        gcf_per_exp_running[i] = wexpacc_byround[i][i] - latest_wexpacc[i]
 
     gcf = sum(gcf_per_exp_running)/NUM_ROUNDS
 
