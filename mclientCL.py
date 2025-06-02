@@ -6,6 +6,8 @@ from clutils.make_experiences import split_dataset
 from clutils.clstrat import make_cl_strat 
 
 import json
+import wandb
+import os
 
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -17,6 +19,9 @@ import torch
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
+# Initializing WanndB
+
+run_id = os.getenv("RUN_ID")
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 32
 NUM_CLIENTS = 5
@@ -93,9 +98,9 @@ class FlowerClient(NumPyClient):
         stream_disc_usage = results_stream["DiskUsage_Stream/eval_phase/test_stream"]
 
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
+        forgetting_per_exp = []
         if rnd  == num_rounds:
             print(f"----------------------------Calculating Forgetting Measures for Client {self.partition_id} in round: {rnd}------------------------------")
-            forgetting_per_exp = []
             exp_acc_hist = local_eval_metrics["expacc"]
             print(exp_acc_hist)
             print(exp_acc)
@@ -119,6 +124,9 @@ class FlowerClient(NumPyClient):
                 "stream_acc":  float(stream_acc),
                 "stream_disc_usage":  float(stream_disc_usage),
                 "exp_acc": json.dumps(exp_acc),
+                "forgetting_per_exp": json.dumps(forgetting_per_exp),
+                "pid": self.partition_id,
+                "round": rnd,
             }
         print("----------------------------CLIENT_INFO--------------------------------")
         print(fit_dict_return)

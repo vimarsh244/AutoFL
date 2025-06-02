@@ -7,8 +7,11 @@ from flwr.server import ServerApp
 from mclientCL import client_fn
 from clserver import server_fn
 
+import wandb
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+# Initialize WandB
 
 print(DEVICE)
 
