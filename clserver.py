@@ -3,10 +3,14 @@ from flwr.common import Metrics, Context
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 from flwr.server.strategy import FedAvg
 
-from clutils.clmetrics import evaluate_metrics_aggregation_fn
+import wandb
+import os
+
+from clutils.clmetrics import evaluate_metrics_aggregation_fn, fit_metrics_aggregation_fn
 
 NUM_ROUNDS = 5
 NUM_CLIENTS = 5
+
 
 def fit_config(server_round: int):
     """Return training configuration dict for each round.
@@ -21,6 +25,14 @@ def fit_config(server_round: int):
     }
     return config
 
+def eval_config(server_round: int):
+    config = {
+            "server_round": server_round,
+            "local_epochs": 3,
+            "num_rounds": NUM_ROUNDS
+            }
+    return config
+
 # Create FedAvg strategy
 strategy = FedAvg(
     fraction_fit=1.0,  # Sample 100% of available clients for training
@@ -29,7 +41,9 @@ strategy = FedAvg(
     min_evaluate_clients=NUM_CLIENTS,  # Never sample less than 5 clients for evaluation
     min_available_clients=NUM_CLIENTS,  # Wait until all 10 clients are available
     on_fit_config_fn=fit_config,
-    evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn
+    on_evaluate_config_fn=eval_config,
+    evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
+    fit_metrics_aggregation_fn=fit_metrics_aggregation_fn
 )
 
 def server_fn(context: Context) -> ServerAppComponents:
