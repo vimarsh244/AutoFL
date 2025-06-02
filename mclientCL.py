@@ -26,6 +26,10 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 32
 NUM_CLIENTS = 5
 
+# Persistent State of Clients
+partition_strategies = [make_cl_strat(Net().to(DEVICE)) for _ in range(NUM_CLIENTS)]
+
+
 class FlowerClient(NumPyClient):
     def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id, n_experiences):
         self.client_state = (context.state)
@@ -39,17 +43,17 @@ class FlowerClient(NumPyClient):
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp
         self.testlen_per_exp = testlen_per_exp
-        self.cl_strategy, self.evaluation = make_cl_strat(net) 
+        self.cl_strategy, self.evaluation = partition_strategies[partition_id]
         self.partition_id = partition_id
         self.n_experiences = n_experiences
 
         print(self.client_state.config_records)
 
     def get_parameters(self, config):
-        return get_parameters(self.net)
+        return get_parameters(self.cl_strategy.model)
 
     def fit(self, parameters, config):
-        set_parameters(self.net, parameters)
+        set_parameters(self.cl_strategy.model, parameters)
         rnd = config["server_round"]
         num_rounds = config["num_rounds"]
 
@@ -106,15 +110,15 @@ class FlowerClient(NumPyClient):
             print(exp_acc)
             for i, e in enumerate(exp_acc_hist):
                 e = json.loads(e)
-                fm = exp_acc[i] - e[i]
+                print(f"LOCAL FORGETTING for EXP{i+1} in client {self.partition_id} = Initial - Final")
+                print(f"{e[i]} - {exp_acc[i]} = {e[i] - exp_acc[i]}")
+                fm = e[i] - exp_acc[i];
                 forgetting_per_exp.append(fm)
             print("Forgetting per exp", forgetting_per_exp)
             forgetting_measure = sum(forgetting_per_exp)/self.n_experiences
         else:
             forgetting_measure = 0
                 
-
-            
 
 
         fit_dict_return = {
@@ -153,7 +157,7 @@ class FlowerClient(NumPyClient):
             
 
         
-        return get_parameters(self.net), self.trainlen_per_exp[rnd-1], fit_dict_return
+        return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)

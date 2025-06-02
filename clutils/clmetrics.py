@@ -26,7 +26,7 @@ wandb.init(
 
 # State of all rounds metrics
 wexpacc_byround = []
-gcf_per_exp_running = [0] * NUM_ROUNDS 
+gcf_per_exp_running =[0 for _ in range (NUM_ROUNDS)]
 
 
 def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -79,9 +79,9 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
             "round": rnd,
             }, step = rnd
             )
-    for i, gcf in enumerate(gcf_per_exp_running):
+    for i, g in enumerate(gcf_per_exp_running):
         wandb.log({
-            f"gcf_exp_{i}": gcf,
+            f"gcf_exp_{i}": g,
             "round": rnd,
             }, step = rnd
             )
