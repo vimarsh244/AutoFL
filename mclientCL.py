@@ -157,6 +157,10 @@ class FlowerClient(NumPyClient):
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)
+
+        rnd = config["server_round"]
+        num_rounds = config["num_rounds"]
+
         cl_strategy, evaluation = make_cl_strat(self.net)
         results = []
         print("------------------------Evaluating Client for Server on Updated Global Model on Test Set--------------------")
@@ -180,7 +184,15 @@ class FlowerClient(NumPyClient):
         print("Acc: ", accuracy)
         print("Per Exp Acc: ", exp_acc)
 
-        return float(loss), sum(self.testlen_per_exp), {"accuracy": float(accuracy), "loss": float(loss), "ExpAccuracy": json.dumps(exp_acc)}
+        eval_dict_return = {
+                "accuracy": float(accuracy),
+                "loss": float(loss),
+                "ExpAccuracy": json.dumps(exp_acc),
+                "server_round": rnd,
+                "pid": self.partition_id,
+                }
+
+        return float(loss), sum(self.testlen_per_exp), eval_dict_return
 
 
 def client_fn(context: Context) -> Client:
