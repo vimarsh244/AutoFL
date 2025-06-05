@@ -1,0 +1,25 @@
+---
+client:
+  num_cpus: 2
+  num_gpus: 0.25
+  type: normal
+server:
+  num_clients: 5
+  fraction_fit: 1
+  fraction_eval: 1
+  min_fit: 5
+  min_eval: 5
+  num_rounds: 5
+  strategy: fedavg
+cl:
+  num_experiences: 5
+  strategy: naive
+  split: random
+dataset:
+  workload: cifar10
+  split: iid
+  alpha: 0.1
+wandb:
+  project: test-autofl 
+  name: testing
+

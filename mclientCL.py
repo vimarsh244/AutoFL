@@ -8,6 +8,7 @@ from clutils.clstrat import make_cl_strat
 import json
 import wandb
 import os
+import logging
 
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -18,6 +19,14 @@ import flwr
 import torch
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
+
+
+logging.basicConfig(filename="newfile.log",
+                    format='%(asctime)s %(message)s',
+                    filemode='w')
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 # Initializing WanndB
 
@@ -58,21 +67,22 @@ class FlowerClient(NumPyClient):
         num_rounds = config["num_rounds"]
 
         print(f"-------------------------------------------------------------------Client {self.partition_id} Fit on round: {rnd}")
+        logger.info(f"Client {self.partition_id} Fit on Round: {rnd}")
 
-        print("Train Stream Benchmark:" )
-        print(f"Type: {type(self.benchmark.train_stream)}")
-        print(f"Dir: {dir(self.benchmark.train_stream)}")
-        print(f"Var: {vars(self.benchmark.train_stream)}")
+        print(dir(self.benchmark.train_stream))
 
         print("Starting Training")
+        logger.info("Starting Training")
         results = []
         for i, experience in enumerate(self.benchmark.train_stream, start=1):
-            print("Experience: ", experience.current_experience)
             if i == rnd:
+                logger.info(f"Training on Experience : {experience.current_experience}")
                 trainres = self.cl_strategy.train(experience)
                 print('Training completed: ', experience.current_experience)
+                logger.info(f"Training Completed: {experience.current_experience}")
 
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
+        logger.info(f"Local Eval of Client {self.partition_id} on round {rnd}")
         results.append(self.cl_strategy.eval(self.benchmark.test_stream))
 
 #        print('--------------------------------RES_TRAIN----------------------------------')
@@ -85,8 +95,8 @@ class FlowerClient(NumPyClient):
 #        print('---------------------------------LAST_METRICS------------------------------')
 #        print(results_stream)
 
-        print('----------------------------RESULTS OF LOCAL EVAL---------------------------')
-        print(results)
+#        print('----------------------------RESULTS OF LOCAL EVAL---------------------------')
+#        print(results)
         exp_acc = []
         for res in results:
             for exp, acc in res.items():
