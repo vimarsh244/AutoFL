@@ -15,12 +15,16 @@ from avalanche.training.plugins import EvaluationPlugin
 
 from avalanche.training.supervised import Naive
 
+from omegaconf import OmegaConf
+
+cfg = OmegaConf.load('config/config.yaml')
+
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
 
     # log to text file
-    text_logger = TextLogger(open('log.txt', 'a'))
+    text_logger = TextLogger(open('logs/avalog.txt', 'a'))
 
     # print to stdout
     interactive_logger = InteractiveLogger()

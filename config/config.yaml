@@ -3,6 +3,7 @@ client:
   num_cpus: 2
   num_gpus: 0.25
   type: normal
+  epochs: 3
 server:
   num_clients: 5
   fraction_fit: 1
@@ -17,9 +18,10 @@ cl:
   split: random
 dataset:
   workload: cifar10
+  batch_size: 32
   split: iid
   alpha: 0.1
-wandb:
+wb:
   project: test-autofl 
   name: testing
 

@@ -1,6 +1,17 @@
 from torch.utils.data import Subset
 from avalanche.benchmarks import benchmark_from_datasets
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
+
+from omegaconf import OmegaConf
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+config_path = project_root / "config" / "config.yaml"
+cfg = OmegaConf.load(config_path)
+
+NUM_EXP = cfg.cl.num_experiences
+
+
 # from avalanche.benchmarks.utils import make_classification_dataset
 
 # def split_dataset(dataset, n_experiences):

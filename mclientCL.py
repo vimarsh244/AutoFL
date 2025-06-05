@@ -8,7 +8,9 @@ from clutils.clstrat import make_cl_strat
 import json
 import wandb
 import os
-import logging
+import logging.config
+import yaml
+from datetime import datetime
 
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -20,17 +22,17 @@ import torch
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
+# Setting up Logger
+with open("config/logger.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
-logging.basicConfig(filename="newfile.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+config['handlers']['file']['filename'] = log_filename
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logging.config.dictConfig(config)
 
-# Initializing WanndB
+logger = logging.getLogger("myLogger")
 
-run_id = os.getenv("RUN_ID")
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 32
 NUM_CLIENTS = 5

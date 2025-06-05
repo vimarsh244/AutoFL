@@ -4,24 +4,28 @@ from logging import INFO, WARNING
 from flwr.common.logger import log
 
 import wandb
-import  os
+import os
+from omegaconf import OmegaConf
 
 import numpy as np
 import json
 
-NUM_ROUNDS = 5
+# Setup Config
+cfg = OmegaConf.load('config/config.yaml')
+
+NUM_ROUNDS = cfg.server.num_rounds
+LOCAL_EPOCHS = cfg.client.epochs
+NUM_CLIENTS = cfg.server.num_clients
 
 # WandB Initialization
-run_id = os.getenv("RUN_ID")
 wandb.init(
-        project = "test-autofl",
+        project = cfg.wb.project,
         config={
-            "dataset":  "cifar10",
-            "num_clients":  5,
-            "num_rounds":  5,
-            "local_epochs":  3,
+            "dataset":  cfg.dataset.workload,
+            "num_clients":  NUM_CLIENTS,
+            "num_rounds":  NUM_ROUNDS,
+            "local_epochs":  LOCAL_EPOCHS,
             },
-#        id = f"{run_id}"
         )
 
 # State of all rounds metrics

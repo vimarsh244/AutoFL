@@ -1,4 +1,4 @@
-NUM_CLIENTS = 5
+NUM_CLIENTS = cfg.server.num_clients
 BATCH_SIZE = 32
 
 import torch
@@ -10,6 +10,14 @@ from avalanche.benchmarks.utils.data import make_avalanche_dataset
 
 import flwr
 from flwr_datasets import FederatedDataset
+
+from omegaconf import OmegaConf
+
+# Setup Config
+cfg = OmegaConf.load('config/config.yaml')
+
+NUM_CLIENTS = cfg.server.num_clients
+BATCH_SIZE = cfg.dataset.batch_size
 
 class TupleDataset(torch.utils.data.Dataset):
     def __init__(self, hf_dataset):
