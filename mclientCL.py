@@ -57,12 +57,15 @@ partition_strategies = [make_cl_strat(Net().to(DEVICE)) for _ in range(NUM_CLIEN
 
 # Client Class
 class FlowerClient(NumPyClient):
-    def __init__(self, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
+    def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
         self.client_state = (context.state)
         if "local_eval_metrics" not in self.client_state.config_records:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
         if "availability" not in self.client_state.config_records:
             self.client_state.config_records["availability"] = ConfigRecord()
+        # Special Provision for acc per exp as needed to calculate fm
+        if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
+            self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
         self.net = net
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp
@@ -72,7 +75,7 @@ class FlowerClient(NumPyClient):
 
         # To add  later: Battery, Location, Speed, Mobility_Trace
 
-        print(json.dumps(self.client_state.config_records, indent=4))
+        print(self.client_state.config_records)
 
     # Get Params from Global Model
     def get_parameters(self, config):
@@ -88,7 +91,7 @@ class FlowerClient(NumPyClient):
         print(f"Client {self.partition_id} Fit on round: {rnd}")
 
         # Train on Experience as per Round
-        cprint("Starting Training", "blue")
+        cprint("Starting Training")
         results = []
         for i, experience in enumerate(self.benchmark.train_stream, start=1):
             if i == rnd:
@@ -125,23 +128,31 @@ class FlowerClient(NumPyClient):
             e = json.loads(e)
             fm = e[i] - curr_accpexp[i];
             cm_fmpexp.append(fm)
-        cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else:
+            cmfm = 0
 
         # Checking Cumalative Forgetting Measure
+        cprint("Check Cumalative FM", "blue")
         cprint("History of Accuracy per Experience for this client")
-        print(json.dumps(hist_accpexp, indent=4))
+        print(json.dumps(hist_accpexp, indent=2))
         print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
         print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
-        print(f"StepWise Forgetting Measure: {cmfm}")
+        print(f"Cumalative Forgetting Measure: {cmfm}")
  
         # Calculate Running Stepwise Forgetting Measure
         sw_fmpexp = []
-        prev_accpexp = json.loads(hist_accpexp[-1])
+        if hist_accpexp:
+            prev_accpexp = json.loads(hist_accpexp[-1])
+        else:
+            prev_accpexp = []
         for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
             sw_fmpexp.append(prev_acc - curr_acc)
         swfm = sum(sw_fmpexp)/NUM_EXP
 
         # Checking Stepwise Forgetting Measure
+        cprint("Check StepWise FM", "blue")
         print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
         print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
         print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
@@ -262,7 +273,7 @@ def client_fn(context: Context) -> Client:
 
     # Preparing list of train experiences
     trainlen_per_exp = []
-    ava_train[]
+    ava_train = []
     for i, exp in enumerate(train_experiences, start=1):
         trainlen_per_exp.append(len(exp))
         ava_exp = as_avalanche_dataset(exp)
@@ -282,6 +293,6 @@ def client_fn(context: Context) -> Client:
     # Print ClientID
     print(f"---------------------------------LAUNCHING CLIENT: {partition_id}-----------------------------------------------")
 
-    return FlowerClient(net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id).to_client()
+    return FlowerClient(context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id).to_client()
 
 

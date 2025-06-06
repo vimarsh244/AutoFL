@@ -21,7 +21,9 @@ dataset:
   workload: cifar10
   batch_size: 32
   split: iid
-  alpha: 0.1
+  niid:
+    alpha: 1.0
+    seed: 42
 wb:
   project: test-autofl 
   name: testing

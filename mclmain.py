@@ -5,10 +5,15 @@ from flwr.client import ClientApp
 from flwr.server import ServerApp
 
 from omegaconf import OmegaConf
+import warnings
 
 from mclientCL import client_fn
 from mclserver import server_fn
 
+# Ignore Depcreation Warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# Load Config
 cfg = OmegaConf.load('config/config.yaml')
 print(OmegaConf.to_yaml(cfg))
 
@@ -24,7 +29,7 @@ def main():
 
     # Run Simluation
 
-    print("running simul")
+    print("Running Simulation")
 
     run_simulation(
         server_app = server,

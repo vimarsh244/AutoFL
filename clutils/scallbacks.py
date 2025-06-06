@@ -131,12 +131,12 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
     losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
     disc_usage = [m["stream_disc_usage"] for _, m in metrics]
-    local_fm = [m["forgetting_measure"] for _, m in metrics]
+    local_fm = [m["cumalative_forgetting_measure"] for _, m in metrics]
 
     rnd = metrics[0][1]["round"]
     pid = [m["pid"] for _, m in metrics]
 
-    exp_accuracy_ds = [json.loads(m["exp_acc"]) for _, m in metrics]
+    exp_accuracy_ds = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
     wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
