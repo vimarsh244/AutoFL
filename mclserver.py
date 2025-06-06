@@ -7,34 +7,12 @@ import wandb
 import os
 from omegaconf import OmegaConf
 
-from clutils.clmetrics import evaluate_metrics_aggregation_fn, fit_metrics_aggregation_fn
+from clutils.scallbacks import evaluate_metrics_aggregation_fn, fit_metrics_aggregation_fn, fit_config, eval_config
 
 cfg = OmegaConf.load('config/config.yaml')
 
 NUM_ROUNDS = cfg.server.num_rounds
 NUM_CLIENTS = cfg.server.num_clients
-
-
-def fit_config(server_round: int):
-    """Return training configuration dict for each round.
-
-    Perform two rounds of training with one local epoch, increase to two local
-    epochs afterwards.
-    """
-    config = {
-        "server_round": server_round,  
-        "local_epochs": cfg.client.epochs, 
-        "num_rounds": cfg.server.num_rounds
-    }
-    return config
-
-def eval_config(server_round: int):
-    config = {
-            "server_round": server_round,
-            "local_epochs": 3,
-            "num_rounds": NUM_ROUNDS
-            }
-    return config
 
 # Create FedAvg strategy
 strategy = FedAvg(

@@ -33,6 +33,29 @@ wexpacc_byround = []
 gcf_per_exp_running =[0 for _ in range (NUM_ROUNDS)]
 
 
+def fit_config(server_round: int):
+    """Return training configuration dict for each round.
+
+    Perform two rounds of training with one local epoch, increase to two local
+    epochs afterwards.
+    """
+    config = {
+        "server_round": server_round,  
+        "local_epochs": cfg.client.epochs, 
+        "num_rounds": cfg.server.num_rounds
+    }
+    return config
+
+def eval_config(server_round: int):
+    config = {
+            "server_round": server_round,
+            "local_epochs": 3,
+            "num_rounds": NUM_ROUNDS
+            }
+    return config
+
+
+
 def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     losses = [num_examples * m["loss"] for num_examples, m in metrics]
