@@ -1,54 +1,44 @@
+# Import From Custom Modules
 from clutils.ParamFns import set_parameters, get_parameters
 from models.SimpleCNN import Net
 from workloads.CIFAR10CL import load_datasets 
 from clutils.make_experiences import split_dataset
 from clutils.clstrat import make_cl_strat 
 
+#Import basic Modules
 import json
-import wandb
 import os
-import logging.config
-import yaml
-from datetime import datetime
+from omegaconf import OmegaConf
 
+# Avalanche Imports
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
 from avalanche.benchmarks.utils.data import make_avalanche_dataset
 from avalanche.benchmarks.utils.utils import as_avalanche_dataset
 
+# Flower Imports
 import flwr
 import torch
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
-# Setting up Logger
-# with open("config/logger.yaml", "r") as f:
-#    config = yaml.safe_load(f)
+#Setting up Configuration
+cfg = OmegaConf.load('config/config.yaml')
 
-# log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-# config['handlers']['file']['filename'] = log_filename
-
-# logging.config.dictConfig(config)
-
-# logger = logging.getLogger("myLogger")
-
+# Setting Global Variables
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 32
-NUM_CLIENTS = 5
+BATCH_SIZE = cfg.dataset.batch_size
+NUM_CLIENTS = cfg.server.num_clients
 
 # Persistent State of Clients
 partition_strategies = [make_cl_strat(Net().to(DEVICE)) for _ in range(NUM_CLIENTS)]
 
-
+# Client Class
 class FlowerClient(NumPyClient):
     def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id, n_experiences):
         self.client_state = (context.state)
         if "local_eval_metrics" not in self.client_state.config_records:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
-#        if "acc" not in self.client_state.config_records:
-#            self.client_state.config_records["acc"] = ConfigRecord()
-#        if "loss" not in self.client_state.config_records:
-#            self.client_state.config_records["loss"] = ConfigRecord()
         self.net = net
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp
@@ -98,6 +88,7 @@ class FlowerClient(NumPyClient):
 
 #        print('----------------------------RESULTS OF LOCAL EVAL---------------------------')
 #        print(results)
+# 
         exp_acc = []
         for res in results:
             for exp, acc in res.items():
@@ -210,18 +201,20 @@ class FlowerClient(NumPyClient):
         return float(loss), sum(self.testlen_per_exp), eval_dict_return
 
 
+# Function that launches a Client
 def client_fn(context: Context) -> Client:
     """Create a Flower client representing a single organization."""
 
     # Load model
     net = Net().to(DEVICE)
 
-    # Load data (CIFAR-10)
-    # Note: each client gets a different trainloader/valloader, so each client
-    # will train and evaluate on their own unique data partition
-    # Read the node_config to fetch data partition associated to this node
+    # Grab Partition Data
     partition_id = context.node_config["partition-id"]
     train_data, test_data = load_datasets(partition_id=partition_id)
+
+    print("DATA")
+    for data in test_data:
+        print(data)
 
     total_train_samples = len(train_data)
     total_eval_samples = len(test_data)
