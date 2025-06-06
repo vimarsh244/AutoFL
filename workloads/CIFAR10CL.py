@@ -1,6 +1,3 @@
-NUM_CLIENTS = cfg.server.num_clients
-BATCH_SIZE = 32
-
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
@@ -12,12 +9,15 @@ import flwr
 from flwr_datasets import FederatedDataset
 
 from omegaconf import OmegaConf
+from pathlib  import Path
 
 # Setup Config
-cfg = OmegaConf.load('config/config.yaml')
+config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+cfg = OmegaConf.load(config_path)
 
-NUM_CLIENTS = cfg.server.num_clients
+# NUM_CLIENTS = cfg.server.num_clients
 BATCH_SIZE = cfg.dataset.batch_size
+NUM_CLIENTS = cfg.server.num_clients
 
 class TupleDataset(torch.utils.data.Dataset):
     def __init__(self, hf_dataset):

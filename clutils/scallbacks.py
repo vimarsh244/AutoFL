@@ -6,12 +6,14 @@ from flwr.common.logger import log
 import wandb
 import os
 from omegaconf import OmegaConf
+from pathlib import Path
 
 import numpy as np
 import json
 
 # Setup Config
-cfg = OmegaConf.load('config/config.yaml')
+config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+cfg = OmegaConf.load(config_path)
 
 NUM_ROUNDS = cfg.server.num_rounds
 LOCAL_EPOCHS = cfg.client.epochs

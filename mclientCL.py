@@ -1,5 +1,4 @@
-from utils.ParamFns import set_parameters, get_parameters
-from utils.TrainTestFns import train, test
+from clutils.ParamFns import set_parameters, get_parameters
 from models.SimpleCNN import Net
 from workloads.CIFAR10CL import load_datasets 
 from clutils.make_experiences import split_dataset
@@ -23,15 +22,15 @@ from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
 # Setting up Logger
-with open("config/logger.yaml", "r") as f:
-    config = yaml.safe_load(f)
+# with open("config/logger.yaml", "r") as f:
+#    config = yaml.safe_load(f)
 
-log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-config['handlers']['file']['filename'] = log_filename
+# log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+# config['handlers']['file']['filename'] = log_filename
 
-logging.config.dictConfig(config)
+# logging.config.dictConfig(config)
 
-logger = logging.getLogger("myLogger")
+# logger = logging.getLogger("myLogger")
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 32
