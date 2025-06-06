@@ -4,6 +4,7 @@ client:
   num_gpus: 0.25
   type: normal
   epochs: 3
+  falloff: 0.0
 server:
   num_clients: 5
   fraction_fit: 1
