@@ -1,6 +1,3 @@
-NUM_CLIENTS = 5
-BATCH_SIZE = 32
-
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
@@ -10,6 +7,18 @@ from avalanche.benchmarks.utils.data import make_avalanche_dataset
 
 import flwr
 from flwr_datasets import FederatedDataset
+from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner
+
+from omegaconf import OmegaConf
+from pathlib  import Path
+
+# Setup Config
+config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+cfg = OmegaConf.load(config_path)
+
+# NUM_CLIENTS = cfg.server.num_clients
+BATCH_SIZE = cfg.dataset.batch_size
+NUM_CLIENTS = cfg.server.num_clients
 
 class TupleDataset(torch.utils.data.Dataset):
     def __init__(self, hf_dataset):
@@ -24,8 +33,25 @@ class TupleDataset(torch.utils.data.Dataset):
 
 
  
+# Cache FederatedDataset
+fds = None
+
 def load_datasets(partition_id: int):
-    fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
+    """Load partitioned CIFAR10"""
+    # Only Initialize FederatedDatasaet Once
+    global fds
+    if fds is None:
+        if cfg.dataset.split == "niid":
+            partitioner = DirichletPartitioner(
+                    num_partitions=NUM_CLIENTS,
+                    partition_by="label",
+                    alpha=cfg.dataset.niid.alpha,
+                    seed=cfg.dataset.niid.seed,
+                )
+        elif cfg.dataset.split == "iid":
+            partitioner = IidPartitioner(num_partitions=NUM_CLIENTS)
+
+        fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
     partition = fds.load_partition(partition_id)
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
