@@ -7,10 +7,9 @@ from avalanche.evaluation.metrics import (
     loss_metrics,
     timing_metrics,
     cpu_usage_metrics, 
-    confusion_matrix_metrics,
     disk_usage_metrics,
     )
-from avalanche.logging import InteractiveLogger, TextLogger, TensorboardLogger, WandBLogger
+from avalanche.logging import InteractiveLogger, TextLogger, TensorboardLogger
 from avalanche.training.plugins import EvaluationPlugin
 
 from avalanche.training.supervised import Naive
@@ -30,14 +29,7 @@ def make_cl_strat(net):
     # print to stdout
     interactive_logger = InteractiveLogger()
 
-    # Initialize WandB logger
-    wandb_logger = WandBLogger(
-        project_name=cfg.wb.project,
-        run_name=cfg.wb.name,
-        config=OmegaConf.to_container(cfg, resolve=True)
-    )
-
-    # Only compute confusion matrix for classification tasks
+    # Only compute standard metrics (no confusion matrix)
     metrics = [
         accuracy_metrics(minibatch=True, epoch=True, experience=True, stream=True),
         loss_metrics(minibatch=True, epoch=True, experience=True, stream=True),
@@ -47,19 +39,9 @@ def make_cl_strat(net):
         disk_usage_metrics(minibatch=True, epoch=True, experience=True, stream=True),
     ]
 
-    # Add confusion matrix only for classification tasks
-    if cfg.dataset.workload in ["cifar10", "cifar100"]:
-        metrics.append(
-            confusion_matrix_metrics(
-                num_classes=cfg.model.num_classes,
-                save_image=True,
-                stream=True
-            )
-        )
-
     eval_plugin = EvaluationPlugin(
         *metrics,
-        loggers=[interactive_logger, text_logger, wandb_logger]
+        loggers=[interactive_logger, text_logger]
     )
 
     cl_strategy = Naive(

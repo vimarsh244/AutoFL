@@ -18,7 +18,7 @@ cl:
   strategy: naive
   split: random
 model:
-  name: simple_cnn
+  name: resnet
   num_classes: 100  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
 dataset:
   workload: cifar100
@@ -29,7 +29,7 @@ dataset:
     seed: 42
 wb:
   project: autofl-testing
-  name: cifar100_dl_v0
+  name: cifar100_resnet_v2
 
 defaults:
   - workload: cifar100  # Choose workload: cifar10, cifar100, bdd100k, kitti

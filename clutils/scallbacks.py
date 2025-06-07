@@ -19,66 +19,12 @@ NUM_ROUNDS = cfg.server.num_rounds
 LOCAL_EPOCHS = cfg.client.epochs
 NUM_CLIENTS = cfg.server.num_clients
 
-# WandB Initialization
-wandb.init(
-    project=cfg.wb.project,
-    name=cfg.wb.name,
-    config={
-        # Server Configuration
-        "server": {
-            "num_clients": cfg.server.num_clients,
-            "fraction_fit": cfg.server.fraction_fit,
-            "fraction_eval": cfg.server.fraction_eval,
-            "min_fit": cfg.server.min_fit,
-            "min_eval": cfg.server.min_eval,
-            "num_rounds": cfg.server.num_rounds,
-            "strategy": cfg.server.strategy
-        },
-        # Client Configuration
-        "client": {
-            "num_cpus": cfg.client.num_cpus,
-            "num_gpus": cfg.client.num_gpus,
-            "type": cfg.client.type,
-            "epochs": cfg.client.epochs,
-            "falloff": cfg.client.falloff
-        },
-        # Dataset Configuration
-        "dataset": {
-            "workload": cfg.dataset.workload,
-            "batch_size": cfg.dataset.batch_size,
-            "split": cfg.dataset.split,
-            "niid": {
-                "alpha": cfg.dataset.niid.alpha,
-                "seed": cfg.dataset.niid.seed
-            }
-        },
-        # Continual Learning Configuration
-        "cl": {
-            "num_experiences": cfg.cl.num_experiences,
-            "strategy": cfg.cl.strategy,
-            "split": cfg.cl.split
-        },
-        # Training Configuration
-        "training": {
-            "batch_size": cfg.training.batch_size,
-            "learning_rate": cfg.training.learning_rate,
-            "epochs": cfg.training.epochs,
-            "optimizer": cfg.training.optimizer
-        }
-    }
-)
-
 # State of all rounds metrics
 wexpacc_byround = []
 gcf_per_exp_running =[0 for _ in range (NUM_ROUNDS)]
 
-
 def fit_config(server_round: int):
-    """Return training configuration dict for each round.
-
-    Perform two rounds of training with one local epoch, increase to two local
-    epochs afterwards.
-    """
+    """Return training configuration dict for each round."""
     config = {
         "server_round": server_round,  
         "local_epochs": cfg.client.epochs, 
@@ -94,8 +40,6 @@ def eval_config(server_round: int):
             }
     return config
 
-
-
 def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     losses = [num_examples * m["loss"] for num_examples, m in metrics]
@@ -103,16 +47,12 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     rnd = metrics[0][1]["server_round"]
 
     exp_accuracy_ds = [json.loads(m["ExpAccuracy"]) for _, m in metrics]
-
-#    exp_accuracy = [m["ExpAccuracy"] for _, m in metrics]
     client_accuracy = [m["accuracy"] for _, m in metrics]
     client_loss = [m["loss"] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     
     wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
-
     wexpacc_byround.append(wexpacc)
-
     latest_wexpacc = wexpacc_byround[-1]
 
     for i, w in enumerate(wexpacc_byround):
@@ -120,50 +60,41 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
 
     gcf = sum(gcf_per_exp_running)/NUM_ROUNDS
 
-    wandb.log(
-            {
-            "global_accuracy": sum(accuracies) / sum(examples),
-            "global_loss": sum(losses) / sum(examples),
-            "gcf": gcf,
-            "round": rnd,
-            }, step=rnd
-            )
-    for i, expacc in enumerate(wexpacc, start=1):
-        wandb.log({
-            f"global_exp_{i}_accuracy": expacc,
-            "round": rnd,
-            }, step=rnd
-            )
-    for i, (acc, cid) in enumerate(zip(client_accuracy, pid), start=1):
-        wandb.log({
-            f"global_acc_client_{cid}": acc,
-            "round": rnd,
-            }, step = rnd
-            )
-    for i, (ls, cid) in enumerate(zip(client_loss, pid), start=1):
-        wandb.log({
-            f"global_loss_client_{cid}": ls,
-            "round": rnd,
-            }, step = rnd
-            )
-    for i, g in enumerate(gcf_per_exp_running):
-        wandb.log({
-            f"gcf_exp_{i}": g,
-            "round": rnd,
-            }, step = rnd
-            )
+    # Log all metrics in a single wandb.log call for better organization
+    wandb_metrics = {
+        # Global metrics
+        "global/accuracy": sum(accuracies) / sum(examples),
+        "global/loss": sum(losses) / sum(examples),
+        "global/forgetting_measure": gcf,
+        "round": rnd,
+    }
 
+    # Per-experience metrics
+    for i, expacc in enumerate(wexpacc, start=1):
+        wandb_metrics[f"global/experience_{i}/accuracy"] = expacc
+
+    # Per-client metrics
+    for i, (acc, cid) in enumerate(zip(client_accuracy, pid), start=1):
+        wandb_metrics[f"client/{cid}/accuracy"] = acc
+        wandb_metrics[f"client/{cid}/loss"] = client_loss[i-1]
+
+    # Per-experience forgetting metrics
+    for i, g in enumerate(gcf_per_exp_running):
+        wandb_metrics[f"global/experience_{i}/forgetting"] = g
+
+    # Log all metrics at once
+    wandb.log(wandb_metrics, step=rnd)
 
     return {
-            "global_accuracy": sum(accuracies) / sum(examples),
-            "global_loss": sum(losses) / sum(examples),
-            "global_wexp_accuracy": ",".join(map(str, wexpacc)),
-            "global_client_accuracy": ",".join(map(str, client_accuracy)),
-            "global_client_loss": ",".join(map(str, client_loss)),
-            "global_exp_accuracy": json.dumps(exp_accuracy_ds),
-            "gcf": float(gcf),
-            "gcf_per_exp": json.dumps(gcf_per_exp_running),
-            }
+        "global_accuracy": sum(accuracies) / sum(examples),
+        "global_loss": sum(losses) / sum(examples),
+        "global_wexp_accuracy": ",".join(map(str, wexpacc)),
+        "global_client_accuracy": ",".join(map(str, client_accuracy)),
+        "global_client_loss": ",".join(map(str, client_loss)),
+        "global_exp_accuracy": json.dumps(exp_accuracy_ds),
+        "gcf": float(gcf),
+        "gcf_per_exp": json.dumps(gcf_per_exp_running),
+    }
 
 def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
@@ -179,30 +110,31 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 
     wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
 
-    wandb.log(
-            {
-            "local_eval_accuracy": sum(accuracies) / sum(examples),
-            "local_eval_loss": sum(losses) / sum(examples),
-            "round": rnd
-            }, step = rnd
-            )
+    # Log all metrics in a single wandb.log call for better organization
+    wandb_metrics = {
+        # Local evaluation metrics
+        "local/accuracy": sum(accuracies) / sum(examples),
+        "local/loss": sum(losses) / sum(examples),
+        "round": rnd,
+    }
 
-    for (cid, fm) in zip(pid, local_fm):
-        wandb.log({
-            f"local_fm_client_{cid}": fm,
-            "round": rnd,
-            }, step = rnd
-            )
+    # Per-client forgetting metrics
+    for cid, fm in zip(pid, local_fm):
+        wandb_metrics[f"client/{cid}/forgetting_measure"] = fm
 
-                
+    # Per-experience accuracy
+    for i, acc in enumerate(wexpacc, start=1):
+        wandb_metrics[f"local/experience_{i}/accuracy"] = acc
 
+    # Log all metrics at once
+    wandb.log(wandb_metrics, step=rnd)
 
     return {
-            "local_eval_accuracy": sum(accuracies) / sum(examples),
-            "local_eval_loss": sum(losses) / sum(examples),
-            "wexp_accuracy": ",".join(map(str, wexpacc)),
-            "local_fm": ",".join(map(str, local_fm)),
-            }
+        "local_eval_accuracy": sum(accuracies) / sum(examples),
+        "local_eval_loss": sum(losses) / sum(examples),
+        "wexp_accuracy": ",".join(map(str, wexpacc)),
+        "local_fm": ",".join(map(str, local_fm)),
+    }
 
 
 
