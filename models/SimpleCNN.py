@@ -1,7 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from omegaconf import OmegaConf
+from pathlib import Path
 
+# Setup Config
+config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+cfg = OmegaConf.load(config_path)
 
 class Net(nn.Module):
     def __init__(self) -> None:
@@ -11,7 +16,9 @@ class Net(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        # Set number of output classes based on dataset
+        num_classes = 100 if cfg.dataset.workload == "cifar100" else 10
+        self.fc3 = nn.Linear(84, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool(F.relu(self.conv1(x)))

@@ -21,14 +21,52 @@ NUM_CLIENTS = cfg.server.num_clients
 
 # WandB Initialization
 wandb.init(
-        project = cfg.wb.project,
-        config={
-            "dataset":  cfg.dataset.workload,
-            "num_clients":  NUM_CLIENTS,
-            "num_rounds":  NUM_ROUNDS,
-            "local_epochs":  LOCAL_EPOCHS,
-            },
-        )
+    project=cfg.wb.project,
+    name=cfg.wb.name,
+    config={
+        # Server Configuration
+        "server": {
+            "num_clients": cfg.server.num_clients,
+            "fraction_fit": cfg.server.fraction_fit,
+            "fraction_eval": cfg.server.fraction_eval,
+            "min_fit": cfg.server.min_fit,
+            "min_eval": cfg.server.min_eval,
+            "num_rounds": cfg.server.num_rounds,
+            "strategy": cfg.server.strategy
+        },
+        # Client Configuration
+        "client": {
+            "num_cpus": cfg.client.num_cpus,
+            "num_gpus": cfg.client.num_gpus,
+            "type": cfg.client.type,
+            "epochs": cfg.client.epochs,
+            "falloff": cfg.client.falloff
+        },
+        # Dataset Configuration
+        "dataset": {
+            "workload": cfg.dataset.workload,
+            "batch_size": cfg.dataset.batch_size,
+            "split": cfg.dataset.split,
+            "niid": {
+                "alpha": cfg.dataset.niid.alpha,
+                "seed": cfg.dataset.niid.seed
+            }
+        },
+        # Continual Learning Configuration
+        "cl": {
+            "num_experiences": cfg.cl.num_experiences,
+            "strategy": cfg.cl.strategy,
+            "split": cfg.cl.split
+        },
+        # Training Configuration
+        "training": {
+            "batch_size": cfg.training.batch_size,
+            "learning_rate": cfg.training.learning_rate,
+            "epochs": cfg.training.epochs,
+            "optimizer": cfg.training.optimizer
+        }
+    }
+)
 
 # State of all rounds metrics
 wexpacc_byround = []

@@ -10,12 +10,23 @@ import warnings
 from mclientCL import client_fn
 from mclserver import server_fn
 
-# Ignore Depcreation Warnings
+# Ignore Deprecation Warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Load Config
 cfg = OmegaConf.load('config/config.yaml')
 print(OmegaConf.to_yaml(cfg))
+
+def get_model():
+    """Get model based on configuration"""
+    if cfg.model.name == "resnet":
+        from models.ResNet import ResNet
+        return ResNet(num_classes=100 if cfg.dataset.workload == "cifar100" else 10)
+    elif cfg.model.name == "simple_cnn":
+        from models.SimpleCNN import Net
+        return Net()
+    else:
+        raise ValueError(f"Unknown model: {cfg.model.name}")
 
 def main():
     client = ClientApp(client_fn=client_fn)
@@ -27,8 +38,7 @@ def main():
                 }
             }
 
-    # Run Simluation
-
+    # Run Simulation
     print("Running Simulation")
 
     run_simulation(
@@ -39,4 +49,4 @@ def main():
     )
 
 if __name__ == "__main__":
-        main()
+    main()

@@ -24,29 +24,51 @@ cfg = OmegaConf.load(config_path)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
-
     # log to text file
     text_logger = TextLogger(open('logs/avalog.txt', 'a'))
 
     # print to stdout
     interactive_logger = InteractiveLogger()
 
-    eval_plugin = EvaluationPlugin(
+    # Initialize WandB logger
+    wandb_logger = WandBLogger(
+        project_name=cfg.wb.project,
+        run_name=cfg.wb.name,
+        config=OmegaConf.to_container(cfg, resolve=True)
+    )
+
+    # Only compute confusion matrix for classification tasks
+    metrics = [
         accuracy_metrics(minibatch=True, epoch=True, experience=True, stream=True),
         loss_metrics(minibatch=True, epoch=True, experience=True, stream=True),
         timing_metrics(epoch=True, epoch_running=True),
         forgetting_metrics(experience=True, stream=True),
         cpu_usage_metrics(experience=True),
-        confusion_matrix_metrics(num_classes=10, save_image=False,
-                                 stream=True),
         disk_usage_metrics(minibatch=True, epoch=True, experience=True, stream=True),
-        loggers=[interactive_logger, text_logger]
+    ]
+
+    # Add confusion matrix only for classification tasks
+    if cfg.dataset.workload in ["cifar10", "cifar100"]:
+        metrics.append(
+            confusion_matrix_metrics(
+                num_classes=cfg.model.num_classes,
+                save_image=True,
+                stream=True
+            )
+        )
+
+    eval_plugin = EvaluationPlugin(
+        *metrics,
+        loggers=[interactive_logger, text_logger, wandb_logger]
     )
 
     cl_strategy = Naive(
         net, Adam(net.parameters()),
-        CrossEntropyLoss(), train_mb_size=32, train_epochs=3, eval_mb_size=32,
+        CrossEntropyLoss(), 
+        train_mb_size=cfg.dataset.batch_size, 
+        train_epochs=cfg.client.epochs, 
+        eval_mb_size=cfg.dataset.batch_size,
         evaluator=eval_plugin,
         device=DEVICE
-        )
+    )
     return cl_strategy, eval_plugin

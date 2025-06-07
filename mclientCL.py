@@ -1,17 +1,14 @@
 # Import From Custom Modules
 from clutils.ParamFns import set_parameters, get_parameters
-from models.SimpleCNN import Net
-from workloads.CIFAR10CL import load_datasets 
 from clutils.make_experiences import split_dataset
 from clutils.clstrat import make_cl_strat 
 
 #Import basic Modules
 import json
-import  random
+import random
 import os
 import warnings
 from omegaconf import OmegaConf
-
 # Avalanche Imports
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -27,9 +24,24 @@ from flwr.common import Metrics, Context, ConfigRecord
 # Ignore Flower Warnings
 warnings.filterwarnings("ignore")
 
-
 #Setting up Configuration
 cfg = OmegaConf.load('config/config.yaml')
+
+
+# Import workload based on configuration
+if cfg.dataset.workload == "cifar10":
+    from workloads.CIFAR10CL import load_datasets
+elif cfg.dataset.workload == "cifar100":
+    if cfg.cl.strategy == "domain":
+        from workloads.CIFAR100DomainCL import load_datasets
+    else:
+        from workloads.CIFAR100CL import load_datasets
+elif cfg.dataset.workload == "bdd100k":
+    from workloads.BDD100KDomainCL import load_datasets
+elif cfg.dataset.workload == "kitti":
+    from workloads.KITTIDomainCL import load_datasets
+else:
+    raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 
 # Setting Global Variables
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -51,14 +63,26 @@ def cprint(text, color="green"):
     }
     print(colors.get(color, colors["reset"]) + text + colors["reset"])
 
+def get_model():
+    """Get model based on configuration"""
+    if cfg.model.name == "resnet":
+        from models.ResNet import ResNet
+        return ResNet(num_classes=cfg.model.num_classes)
+    elif cfg.model.name == "simple_cnn":
+        from models.SimpleCNN import Net
+        return Net()
+    else:
+        raise ValueError(f"Unknown model: {cfg.model.name}")
 
 # Persistent State of Clients
-partition_strategies = [make_cl_strat(Net().to(DEVICE)) for _ in range(NUM_CLIENTS)]
+partition_strategies = [make_cl_strat(get_model().to(DEVICE)) for _ in range(NUM_CLIENTS)]
 
 # Client Class
 class FlowerClient(NumPyClient):
     def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
-        self.client_state = (context.state)
+        self.client_state = context.state
+        if not hasattr(self.client_state, 'config_records'):
+            self.client_state.config_records = ConfigRecord()
         if "local_eval_metrics" not in self.client_state.config_records:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
         if "availability" not in self.client_state.config_records:
@@ -99,7 +123,7 @@ class FlowerClient(NumPyClient):
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
 
-        # Loal Eval after fit on client for metrics
+        # Local Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
         results.append(self.cl_strategy.eval(self.benchmark.test_stream))
 
@@ -109,7 +133,6 @@ class FlowerClient(NumPyClient):
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
                     curr_accpexp.append(float(acc))
-                 
 
         # Get Local Eval Metrics from Avalanche
         last_metrics = self.evaluation.get_last_metrics()
@@ -126,12 +149,8 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i] - curr_accpexp[i];
+            fm = e[i] - curr_accpexp[i]
             cm_fmpexp.append(fm)
-        if cm_fmpexp:
-            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
-        else:
-            cmfm = 0
 
         # Checking Cumalative Forgetting Measure
         cprint("Check Cumalative FM", "blue")
@@ -178,37 +197,35 @@ class FlowerClient(NumPyClient):
 
         
         # Logging Client State
-        cprint("Logging Client States")
+        print("Logging Client States")
         if rnd != 0:
-            if "accuracy_per_exp" not in local_eval_metrics:
-                local_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
-            else:
-                local_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
-            if "stream_accuracy" not in local_eval_metrics:
-                local_eval_metrics["stream_accuracy"] = [stream_acc]
-            else:
-                local_eval_metrics["stream_accuracy"].append(stream_acc)
-            if "stream_loss" not in local_eval_metrics:
-                local_eval_metrics["stream_loss"] = [stream_loss]
-            else:
-                local_eval_metrics["stream_loss"].append(stream_loss)
-            if "cumalative_forgetting_measure" not in local_eval_metrics:
-                local_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
-            else:
-                local_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
-            if "stepwise_forgetting_measure" not in local_eval_metrics:
-                local_eval_metrics["stepwise_forgetting_measure"] = [swfm]
-            else:
-                local_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            metrics = {}
+            metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            metrics["stream_accuracy"] = [stream_acc]
+            metrics["stream_loss"] = [stream_loss]
+            metrics["cumalative_forgetting_measure"] = [cmfm]
+            metrics["stepwise_forgetting_measure"] = [swfm]
             
+            # Update existing metrics if they exist
+            if "accuracy_per_exp" in local_eval_metrics:
+                metrics["accuracy_per_exp"].extend(local_eval_metrics["accuracy_per_exp"])
+            if "stream_accuracy" in local_eval_metrics:
+                metrics["stream_accuracy"].extend(local_eval_metrics["stream_accuracy"])
+            if "stream_loss" in local_eval_metrics:
+                metrics["stream_loss"].extend(local_eval_metrics["stream_loss"])
+            if "cumalative_forgetting_measure" in local_eval_metrics:
+                metrics["cumalative_forgetting_measure"].extend(local_eval_metrics["cumalative_forgetting_measure"])
+            if "stepwise_forgetting_measure" in local_eval_metrics:
+                metrics["stepwise_forgetting_measure"].extend(local_eval_metrics["stepwise_forgetting_measure"])
+            
+            self.client_state.config_records["local_eval_metrics"] = metrics
 
-        
-        cprint("Finished Fit")
+        print("Finished Fit")
         # Client Failure Provision
         if random.random() < cfg.client.falloff:
             return None
         else:
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], {}
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
@@ -232,7 +249,6 @@ class FlowerClient(NumPyClient):
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
                     exp_acc.append(float(acc))
-                    
 
 
         print("Eval of Client: ")
@@ -250,13 +266,12 @@ class FlowerClient(NumPyClient):
 
         return float(loss), sum(self.testlen_per_exp), eval_dict_return
 
-
 # Function that launches a Client
 def client_fn(context: Context) -> Client:
     """Create a Flower client representing a single organization."""
 
     # Load model
-    net = Net().to(DEVICE)
+    net = get_model().to(DEVICE)
 
     # Grab Partition Data
     partition_id = context.node_config["partition-id"]
@@ -269,7 +284,6 @@ def client_fn(context: Context) -> Client:
     n_experiences = cfg.cl.num_experiences
     train_experiences = split_dataset(train_data, n_experiences)
     test_experiences = split_dataset(test_data, n_experiences)  # optional
-
 
     # Preparing list of train experiences
     trainlen_per_exp = []

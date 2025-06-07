@@ -17,14 +17,36 @@ cl:
   num_experiences: 5
   strategy: naive
   split: random
+model:
+  name: simple_cnn
+  num_classes: 100  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
 dataset:
-  workload: cifar10
+  workload: cifar100
   batch_size: 32
   split: iid
   niid:
     alpha: 1.0
     seed: 42
 wb:
-  project: test-autofl 
-  name: testing
+  project: autofl-testing
+  name: cifar100_dl_v0
+
+defaults:
+  - workload: cifar100  # Choose workload: cifar10, cifar100, bdd100k, kitti
+  - model: resnet      # Choose model architecture
+  - _self_
+
+# server:
+#   num_rounds: 10
+#   num_clients: 10
+#   fraction_fit: 0.8
+#   fraction_eval: 0.2
+#   min_fit: 8
+#   min_eval: 2
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 5
+  optimizer: adam
 
