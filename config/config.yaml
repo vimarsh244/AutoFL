@@ -29,7 +29,7 @@ dataset:
     seed: 42
 wb:
   project: autofl-testing
-  name: cifar100_resnet_v2
+  name: cifar100_resnet_v3
 
 defaults:
   - workload: cifar100  # Choose workload: cifar10, cifar100, bdd100k, kitti

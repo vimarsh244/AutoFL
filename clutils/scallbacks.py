@@ -15,6 +15,13 @@ import json
 config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
 cfg = OmegaConf.load(config_path)
 
+wandb.init(
+    project=cfg.wb.project,
+    name=cfg.wb.name,
+    config=OmegaConf.to_container(cfg, resolve=True)
+)
+
+
 NUM_ROUNDS = cfg.server.num_rounds
 LOCAL_EPOCHS = cfg.client.epochs
 NUM_CLIENTS = cfg.server.num_clients
@@ -96,44 +103,70 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
         "gcf_per_exp": json.dumps(gcf_per_exp_running),
     }
 
-def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
+def fit_metrics_aggregation_fn(metrics: list) -> dict:
+    # metrics: List[Tuple[num_examples, client_metrics_dict]]
     accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
     losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
-    disc_usage = [m["stream_disc_usage"] for _, m in metrics]
-    local_fm = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    forgetting = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    stepwise_forgetting = [m["stepwise_forgetting_measure"] for _, m in metrics]
+    exp_accs = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
+    # Optionally, confusion matrices
+    confusion_matrices = [json.loads(m["confusion_matrix"]) for _, m in metrics if "confusion_matrix" in m]
 
-    rnd = metrics[0][1]["round"]
-    pid = [m["pid"] for _, m in metrics]
+    avg_acc = sum(accuracies) / sum(num_examples for num_examples, _ in metrics)
+    avg_loss = sum(losses) / sum(num_examples for num_examples, _ in metrics)
+    avg_forgetting = np.mean(forgetting)
+    avg_stepwise_forgetting = np.mean(stepwise_forgetting)
+    avg_exp_acc = np.mean(exp_accs, axis=0).tolist()  # Per-experience average
 
-    exp_accuracy_ds = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
-    examples = [num_examples for num_examples, _ in metrics]
+    # BWT and FWT (example, you may need to adjust based on your history storage)
+    bwt = avg_exp_acc[-1] - np.mean(avg_exp_acc[:-1]) if len(avg_exp_acc) > 1 else 0
+    fwt = avg_exp_acc[0] - np.mean(avg_exp_acc[1:]) if len(avg_exp_acc) > 1 else 0
 
-    wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
+    # Aggregate confusion matrix if available
+    if confusion_matrices:
+        agg_conf_matrix = np.sum(confusion_matrices, axis=0)
+        wandb_conf_matrix = wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=None,
+            preds=None,
+            confusion_matrix=agg_conf_matrix.tolist(),
+            class_names=[str(i) for i in range(len(agg_conf_matrix))]
+        )
+    else:
+        wandb_conf_matrix = None
 
-    # Log all metrics in a single wandb.log call for better organization
-    wandb_metrics = {
-        # Local evaluation metrics
-        "local/accuracy": sum(accuracies) / sum(examples),
-        "local/loss": sum(losses) / sum(examples),
-        "round": rnd,
+    # Log to wandb
+    log_dict = {
+        "global/accuracy": avg_acc,
+        "global/loss": avg_loss,
+        "global/forgetting": avg_forgetting,
+        "global/stepwise_forgetting": avg_stepwise_forgetting,
+        "global/BWT": bwt,
+        "global/FWT": fwt,
+        "global/experience_accuracy": avg_exp_acc,
     }
+    print("Logging to wandb:", log_dict)  # Debug print
+    # Also log with simple keys for debugging
+    wandb.log({
+        "accuracy": avg_acc,
+        "loss": avg_loss,
+        "forgetting": avg_forgetting,
+        "stepwise_forgetting": avg_stepwise_forgetting,
+        "BWT": bwt,
+        "FWT": fwt,
+    })
+    wandb.log(log_dict)
 
-    # Per-client forgetting metrics
-    for cid, fm in zip(pid, local_fm):
-        wandb_metrics[f"client/{cid}/forgetting_measure"] = fm
-
-    # Per-experience accuracy
-    for i, acc in enumerate(wexpacc, start=1):
-        wandb_metrics[f"local/experience_{i}/accuracy"] = acc
-
-    # Log all metrics at once
-    wandb.log(wandb_metrics, step=rnd)
-
+    
     return {
-        "local_eval_accuracy": sum(accuracies) / sum(examples),
-        "local_eval_loss": sum(losses) / sum(examples),
-        "wexp_accuracy": ",".join(map(str, wexpacc)),
-        "local_fm": ",".join(map(str, local_fm)),
+        "global_accuracy": avg_acc,
+        "global_loss": avg_loss,
+        "global_forgetting": avg_forgetting,
+        "global_stepwise_forgetting": avg_stepwise_forgetting,
+        "global_BWT": bwt,
+        "global_FWT": fwt,
+        "global_experience_accuracy": json.dumps(avg_exp_acc),
     }
 
 

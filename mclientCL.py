@@ -136,7 +136,7 @@ class FlowerClient(NumPyClient):
 
         # Get Local Eval Metrics from Avalanche
         last_metrics = self.evaluation.get_last_metrics()
-        confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()
+        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
         stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
         stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
         stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
@@ -179,7 +179,7 @@ class FlowerClient(NumPyClient):
             
         # Make Fit Metrics Dictionary
         fit_dict_return = {
-                "confusion_matrix": json.dumps(confusion_matrix),
+                # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
                 "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
@@ -225,7 +225,7 @@ class FlowerClient(NumPyClient):
         if random.random() < cfg.client.falloff:
             return None
         else:
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], {}
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
