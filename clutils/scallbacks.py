@@ -62,7 +62,7 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     pid = [m["pid"] for _, m in metrics]
     rnd = metrics[0][1]["server_round"]
 
-    cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrrics]
+    cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrics]
     stepwise_forgetting_measures = [m["stepwise_forgetting_measure"] for _, m in metrics]
 
     accuracypexp_pc = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
@@ -71,14 +71,14 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     weighted_accuracy_pexp = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*accuracypexp_pc)]
 
     eval_metrics = {
-        "global/average_accuracy": sum(w_accuracies) / sum(examples),
-        "global/client_accuracy": {id: acc for id, acc in zip(pid,client_accuracies)},
-        "global/average_loss": sum(w_losses) / sum(examples),
-        "global/client_loss": {id: loss for id, loss in zip(pid, client_losses)},
-        "global/average_cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
-        "global/client_cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
-        "global/average_stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
-        "global/client_stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
+        "global/average/accuracy": sum(w_accuracies) / sum(examples),
+        "global/client/accuracy": {id: acc for id, acc in zip(pid,client_accuracies)},
+        "global/average/loss": sum(w_losses) / sum(examples),
+        "global/client/loss": {id: loss for id, loss in zip(pid, client_losses)},
+        "global/average/cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
+        "global/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
+        "global/average/stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
+        "global/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
     }
 
     wandb.log(eval_metrics, step=rnd)
@@ -113,14 +113,14 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     weighted_accuracy_per_exp = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*accuracy_per_exp_pc)]
 
     fit_metrics = {
-        "local/average_accuracy": sum(w_accuracies) / sum(examples),
-        "local/client_accuracy": {id: acc for id, acc in zip(pid,client_acc)},
-        "local/average_loss": sum(w_losses) / sum(examples),
-        "local/client_loss": {id: loss for id, loss in zip(pid, client_loss)},
-        "local/average_cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
-        "local/client_cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
-        "local/average_stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
-        "local/client_stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
+        "local/average/accuracy": sum(w_accuracies) / sum(examples),
+        "local/client/accuracy": {id: acc for id, acc in zip(pid,client_acc)},
+        "local/average/loss": sum(w_losses) / sum(examples),
+        "local/client/loss": {id: loss for id, loss in zip(pid, client_loss)},
+        "local/average/cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
+        "local/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
+        "local/average/stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
+        "local/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
            }
 
     # Logging to Wandb

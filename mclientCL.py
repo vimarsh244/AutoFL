@@ -69,7 +69,7 @@ class FlowerClient(NumPyClient):
         if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
             self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
         if "accuracy_per_exp" not in self.client_state.config_records["global_eval_metrics"]:
-            self.client_state.config_records["global_eval_metrics"]["accurcy_per_exp"] = []
+            self.client_state.config_records["global_eval_metrics"]["accuracy_per_exp"] = []
         if "rounds_selected" not in self.client_state.config_records["local_eval_metrics"]:
             self.client_state.config_records["local_eval_metrics"]["rounds_selected"] = []
         if "rounds_selected" not in self.client_state.config_records["global_eval_metrics"]:
@@ -182,7 +182,7 @@ class FlowerClient(NumPyClient):
                 "round": rnd,
             }
         cprint("----------------------------Results After Fit--------------------------------")
-        print(fit_dict_return)
+        print(json.dumps(fit_dict_return, indent=4))
         cprint('-----------------------------------------------------------------------')
 
         
@@ -288,7 +288,7 @@ class FlowerClient(NumPyClient):
         eval_dict_return = {
                 "stream_accuracy": float(stream_acc),
                 "stream_loss": float(stream_loss),
-                "accuracy_per_experience": json.dumps(accpexp),
+                "accuracy_per_experience": json.dumps(curr_accpexp),
                 "stepwise_forgetting_measure": float(swfm),
                 "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_per_experience": json.dumps(sw_fmpexp),
@@ -325,7 +325,7 @@ class FlowerClient(NumPyClient):
                 global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
             global_eval_metrics["rounds_selected"].append(rnd)
 
-         return float(loss), sum(self.testlen_per_exp), eval_dict_return
+        return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
 
 
 # Function that launches a Client
