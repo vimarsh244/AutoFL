@@ -17,7 +17,7 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
         # Set number of output classes based on dataset
-        num_classes = 100 if cfg.dataset.workload == "cifar100" else 10
+        num_classes = cfg.model.num_classes
         self.fc3 = nn.Linear(84, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

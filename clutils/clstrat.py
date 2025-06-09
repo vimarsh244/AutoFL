@@ -24,7 +24,8 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
     # log to text file
-    text_logger = TextLogger(open('logs/avalog.txt', 'a'))
+    # text_logger = TextLogger(open(f"{cfg.}"))
+    text_logger = TextLogger(open('logs/avalog2.txt', 'a'))
 
     # print to stdout
     interactive_logger = InteractiveLogger()

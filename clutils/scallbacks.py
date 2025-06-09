@@ -107,7 +107,8 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
     # metrics: List[Tuple[num_examples, client_metrics_dict]]
     accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
     losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
-    forgetting = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    # forgetting = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    forgetting = [m.get("cumalative_forgetting_measure", 0) for _, m in metrics]
     stepwise_forgetting = [m["stepwise_forgetting_measure"] for _, m in metrics]
     exp_accs = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
     # Optionally, confusion matrices

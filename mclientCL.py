@@ -158,7 +158,7 @@ class FlowerClient(NumPyClient):
         print(json.dumps(hist_accpexp, indent=2))
         print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
         print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
-        print(f"Cumalative Forgetting Measure: {cmfm}")
+        # print(f"Cumalative Forgetting Measure: {cmfm}")
  
         # Calculate Running Stepwise Forgetting Measure
         sw_fmpexp = []
@@ -180,7 +180,7 @@ class FlowerClient(NumPyClient):
         # Make Fit Metrics Dictionary
         fit_dict_return = {
                 # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
-                "cumalative_forgetting_measure":  float(cmfm),
+                # "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
                 "stream_acc":  float(stream_acc),
@@ -203,7 +203,7 @@ class FlowerClient(NumPyClient):
             metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
             metrics["stream_accuracy"] = [stream_acc]
             metrics["stream_loss"] = [stream_loss]
-            metrics["cumalative_forgetting_measure"] = [cmfm]
+            # metrics["cumalative_forgetting_measure"] = [cmfm]
             metrics["stepwise_forgetting_measure"] = [swfm]
             
             # Update existing metrics if they exist
@@ -275,34 +275,27 @@ def client_fn(context: Context) -> Client:
 
     # Grab Partition Data
     partition_id = context.node_config["partition-id"]
-    train_data, test_data = load_datasets(partition_id=partition_id)
 
-    total_train_samples = len(train_data)
-    total_eval_samples = len(test_data)
+    # --- Robust dataset loading for both DomainCL and regular CL ---
+    # load_datasets may return a tuple (train_data, test_data) or a benchmark object
+    dataset_result = load_datasets(partition_id=partition_id)
 
-    # Splitting Data into Experiences
-    n_experiences = cfg.cl.num_experiences
-    train_experiences = split_dataset(train_data, n_experiences)
-    test_experiences = split_dataset(test_data, n_experiences)  # optional
-
-    # Preparing list of train experiences
-    trainlen_per_exp = []
-    ava_train = []
-    for i, exp in enumerate(train_experiences, start=1):
-        trainlen_per_exp.append(len(exp))
-        ava_exp = as_avalanche_dataset(exp)
-        ava_train.append(exp)
-
-    # Preparing list of test experiences
-    testlen_per_exp = []
-    ava_test = []
-    for i, exp in enumerate(test_experiences):
-        testlen_per_exp.append(len(exp))
-        ava_exp = as_avalanche_dataset(exp)
-        ava_test.append(exp)
-
-    # Creating benchmarks 
-    benchmark = benchmark_from_datasets(train=ava_train, test=ava_test)
+    if isinstance(dataset_result, tuple):
+        # Regular CL: (train_data, test_data)
+        train_data, test_data = dataset_result
+        n_experiences = cfg.cl.num_experiences
+        train_experiences = split_dataset(train_data, n_experiences)
+        test_experiences = split_dataset(test_data, n_experiences)
+        trainlen_per_exp = [len(exp) for exp in train_experiences]
+        testlen_per_exp = [len(exp) for exp in test_experiences]
+        from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
+        benchmark = benchmark_from_datasets(train=train_experiences, test=test_experiences)
+    else:
+        # DomainCL: benchmark object
+        benchmark = dataset_result
+        n_experiences = cfg.cl.num_experiences
+        trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_stream]
+        testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_stream]
 
     # Print ClientID
     print(f"---------------------------------LAUNCHING CLIENT: {partition_id}-----------------------------------------------")

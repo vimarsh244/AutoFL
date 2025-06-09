@@ -1,9 +1,9 @@
 ---
 client:
-  num_cpus: 2
-  num_gpus: 0.25
+  num_cpus: 8
+  num_gpus: 0.20
   type: normal
-  epochs: 3
+  epochs: 10
   falloff: 0.0
 server:
   num_clients: 5
@@ -15,13 +15,13 @@ server:
   strategy: fedavg
 cl:
   num_experiences: 5
-  strategy: naive
+  strategy: naive # naive or domain | domain is for domain incremental learning, naive is for experience incrental learning (afaik)
   split: random
 model:
-  name: resnet
-  num_classes: 100  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
+  name: simple_cnn
+  num_classes: 10  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
 dataset:
-  workload: cifar100
+  workload: cifar10
   batch_size: 32
   split: iid
   niid:
@@ -29,11 +29,11 @@ dataset:
     seed: 42
 wb:
   project: autofl-testing
-  name: cifar100_resnet_v3
+  name: cifar10_naive_simple_cnn
 
 defaults:
-  - workload: cifar100  # Choose workload: cifar10, cifar100, bdd100k, kitti
-  - model: resnet      # Choose model architecture
+  - workload: cifar10  # Choose workload: cifar10, cifar100, bdd100k, kitti
+  - model: simple_cnn      # Choose model architecture
   - _self_
 
 # server:
