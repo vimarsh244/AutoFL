@@ -11,8 +11,8 @@ __pycache__/
 *.so
 
 # WandB
-wandb/
-logs/
+wandb/*
+logs/*
 log.txt
 templogs/
 

@@ -18,19 +18,20 @@ from avalanche.training.supervised import Naive
 from omegaconf import OmegaConf
 from pathlib import Path
 
+# Setting up Config Path
 config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
 cfg = OmegaConf.load(config_path)
 
+stratetgy = cfg.cl.strategy 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
-
     # log to text file
     text_logger = TextLogger(open('logs/avalog.txt', 'a'))
-
     # print to stdout
     interactive_logger = InteractiveLogger()
 
+    # Define Avalanche Eval Plugin
     eval_plugin = EvaluationPlugin(
         accuracy_metrics(minibatch=True, epoch=True, experience=True, stream=True),
         loss_metrics(minibatch=True, epoch=True, experience=True, stream=True),
@@ -49,4 +50,5 @@ def make_cl_strat(net):
         evaluator=eval_plugin,
         device=DEVICE
         )
+
     return cl_strategy, eval_plugin
