@@ -22,18 +22,14 @@ NUM_CLIENTS = cfg.server.num_clients
 # WandB Initialization
 wandb.init(
         project = cfg.wb.project,
-        config={
-            "dataset":  cfg.dataset.workload,
-            "num_clients":  NUM_CLIENTS,
-            "num_rounds":  NUM_ROUNDS,
-            "local_epochs":  LOCAL_EPOCHS,
-            },
+        config = cfg,
+        #config={
+        #    "dataset":  cfg.dataset.workload,
+        #    "num_clients":  NUM_CLIENTS,
+        #    "num_rounds":  NUM_ROUNDS,
+        #    "local_epochs":  LOCAL_EPOCHS,
+        #    },
         )
-
-# State of all rounds metrics
-wexpacc_byround = []
-gcf_per_exp_running =[0 for _ in range (NUM_ROUNDS)]
-
 
 def fit_config(server_round: int):
     """Return training configuration dict for each round.
@@ -51,119 +47,90 @@ def fit_config(server_round: int):
 def eval_config(server_round: int):
     config = {
             "server_round": server_round,
-            "local_epochs": 3,
-            "num_rounds": NUM_ROUNDS
+            "local_epochs": cfg.client.epochs,
+            "num_rounds": cfg.server.num_rounds,
             }
     return config
 
 
 
 def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    losses = [num_examples * m["loss"] for num_examples, m in metrics]
+    client_accuracies = [m["stream_accuracy"] for _, m in metrics]
+    client_losses = [m["stream_loss"] for _, m in metrics]
+    w_accuracies = [num_examples * m["stream_accuracy"] for num_examples, m in metrics]
+    w_losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
     pid = [m["pid"] for _, m in metrics]
     rnd = metrics[0][1]["server_round"]
 
-    exp_accuracy_ds = [json.loads(m["ExpAccuracy"]) for _, m in metrics]
+    cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    stepwise_forgetting_measures = [m["stepwise_forgetting_measure"] for _, m in metrics]
 
-#    exp_accuracy = [m["ExpAccuracy"] for _, m in metrics]
-    client_accuracy = [m["accuracy"] for _, m in metrics]
-    client_loss = [m["loss"] for _, m in metrics]
+    accuracypexp_pc = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
+
     examples = [num_examples for num_examples, _ in metrics]
-    
-    wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
+    weighted_accuracy_pexp = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*accuracypexp_pc)]
 
-    wexpacc_byround.append(wexpacc)
+    eval_metrics = {
+        "global/average/accuracy": sum(w_accuracies) / sum(examples),
+        "global/client/accuracy": {id: acc for id, acc in zip(pid,client_accuracies)},
+        "global/average/loss": sum(w_losses) / sum(examples),
+        "global/client/loss": {id: loss for id, loss in zip(pid, client_losses)},
+        "global/average/cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
+        "global/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
+        "global/average/stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
+        "global/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
+    }
 
-    latest_wexpacc = wexpacc_byround[-1]
-
-    for i, w in enumerate(wexpacc_byround):
-        gcf_per_exp_running[i] = wexpacc_byround[i][i] - latest_wexpacc[i]
-
-    gcf = sum(gcf_per_exp_running)/NUM_ROUNDS
-
-    wandb.log(
-            {
-            "global_accuracy": sum(accuracies) / sum(examples),
-            "global_loss": sum(losses) / sum(examples),
-            "gcf": gcf,
-            "round": rnd,
-            }, step=rnd
-            )
-    for i, expacc in enumerate(wexpacc, start=1):
-        wandb.log({
-            f"global_exp_{i}_accuracy": expacc,
-            "round": rnd,
-            }, step=rnd
-            )
-    for i, (acc, cid) in enumerate(zip(client_accuracy, pid), start=1):
-        wandb.log({
-            f"global_acc_client_{cid}": acc,
-            "round": rnd,
-            }, step = rnd
-            )
-    for i, (ls, cid) in enumerate(zip(client_loss, pid), start=1):
-        wandb.log({
-            f"global_loss_client_{cid}": ls,
-            "round": rnd,
-            }, step = rnd
-            )
-    for i, g in enumerate(gcf_per_exp_running):
-        wandb.log({
-            f"gcf_exp_{i}": g,
-            "round": rnd,
-            }, step = rnd
-            )
-
+    wandb.log(eval_metrics, step=rnd)
 
     return {
-            "global_accuracy": sum(accuracies) / sum(examples),
-            "global_loss": sum(losses) / sum(examples),
-            "global_wexp_accuracy": ",".join(map(str, wexpacc)),
-            "global_client_accuracy": ",".join(map(str, client_accuracy)),
-            "global_client_loss": ",".join(map(str, client_loss)),
-            "global_exp_accuracy": json.dumps(exp_accuracy_ds),
-            "gcf": float(gcf),
-            "gcf_per_exp": json.dumps(gcf_per_exp_running),
+            "global/average_accuracy": sum(w_accuracies) / sum(examples),
+            "global/average_loss": sum(w_losses) / sum(examples),
+            "global/average_cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
+            "global/average_stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
             }
 
 def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
-    losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
-    disc_usage = [m["stream_disc_usage"] for _, m in metrics]
-    local_fm = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    """Calculate Metrics After Fit of Clients"""
 
+    # Per Client Acc and Loss
+    client_acc = [m["stream_acc"] for _, m in metrics]
+    client_loss = [m["stream_loss"] for _, m in metrics]
+    # Weighted Acc and Loss
+    w_accuracies = [num_examples * m["stream_acc"] for num_examples, m in metrics]
+    w_losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
+    # Forgetting Measures
+    cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrics]
+    stepwise_forgetting_measures = [m["stepwise_forgetting_measure"] for _, m in metrics]
+
+    # Round and Partition Id's
     rnd = metrics[0][1]["round"]
     pid = [m["pid"] for _, m in metrics]
 
-    exp_accuracy_ds = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
+    accuracy_per_exp_pc = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
-    wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
+    weighted_accuracy_per_exp = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*accuracy_per_exp_pc)]
 
-    wandb.log(
-            {
-            "local_eval_accuracy": sum(accuracies) / sum(examples),
-            "local_eval_loss": sum(losses) / sum(examples),
-            "round": rnd
-            }, step = rnd
-            )
+    fit_metrics = {
+        "local/average/accuracy": sum(w_accuracies) / sum(examples),
+        "local/client/accuracy": {id: acc for id, acc in zip(pid,client_acc)},
+        "local/average/loss": sum(w_losses) / sum(examples),
+        "local/client/loss": {id: loss for id, loss in zip(pid, client_loss)},
+        "local/average/cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
+        "local/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
+        "local/average/stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
+        "local/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
+           }
 
-    for (cid, fm) in zip(pid, local_fm):
-        wandb.log({
-            f"local_fm_client_{cid}": fm,
-            "round": rnd,
-            }, step = rnd
-            )
-
-                
-
+    # Logging to Wandb
+    wandb.log(fit_metrics, step=rnd)
 
     return {
-            "local_eval_accuracy": sum(accuracies) / sum(examples),
-            "local_eval_loss": sum(losses) / sum(examples),
-            "wexp_accuracy": ",".join(map(str, wexpacc)),
-            "local_fm": ",".join(map(str, local_fm)),
+            "local/average_accuracy": sum(w_accuracies) / sum(examples),
+            "local/average_loss": sum(w_losses) / sum(examples),
+            "local/average_cumalative_forgetting": sum(cumalative_forgetting_measures)/ len(cumalative_forgetting_measures),
+            "local/average_stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
             }
 
 

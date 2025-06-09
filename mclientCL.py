@@ -61,11 +61,19 @@ class FlowerClient(NumPyClient):
         self.client_state = (context.state)
         if "local_eval_metrics" not in self.client_state.config_records:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
+        if "global_eval_metrics" not in self.client_state.config_records:
+            self.client_state.config_records["global_eval_metrics"] = ConfigRecord()
         if "availability" not in self.client_state.config_records:
             self.client_state.config_records["availability"] = ConfigRecord()
         # Special Provision for acc per exp as needed to calculate fm
         if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
             self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
+        if "accuracy_per_exp" not in self.client_state.config_records["global_eval_metrics"]:
+            self.client_state.config_records["global_eval_metrics"]["accuracy_per_exp"] = []
+        if "rounds_selected" not in self.client_state.config_records["local_eval_metrics"]:
+            self.client_state.config_records["local_eval_metrics"]["rounds_selected"] = []
+        if "rounds_selected" not in self.client_state.config_records["global_eval_metrics"]:
+            self.client_state.config_records["global_eval_metrics"]["rounds_selected"] = []
         self.net = net
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp
@@ -121,6 +129,7 @@ class FlowerClient(NumPyClient):
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
         hist_accpexp = local_eval_metrics["accuracy_per_exp"]
+        round_fit = local_eval_metrics["rounds_selected"]
 
         # Calculating Running Cumalative Forgetting Measure
         cm_fmpexp = []
@@ -172,8 +181,8 @@ class FlowerClient(NumPyClient):
                 "pid": self.partition_id,
                 "round": rnd,
             }
-        cprint("----------------------------CLIENT_INFO--------------------------------")
-        print(fit_dict_return)
+        cprint("----------------------------Results After Fit--------------------------------")
+        print(json.dumps(fit_dict_return, indent=4))
         cprint('-----------------------------------------------------------------------')
 
         
@@ -200,6 +209,7 @@ class FlowerClient(NumPyClient):
                 local_eval_metrics["stepwise_forgetting_measure"] = [swfm]
             else:
                 local_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            local_eval_metrics["rounds_selected"].append(rnd)
             
 
         
@@ -212,43 +222,110 @@ class FlowerClient(NumPyClient):
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
+        # Setting Global Model param
         set_parameters(self.net, parameters)
-
         rnd = config["server_round"]
         num_rounds = config["num_rounds"]
 
+        # Creating a new CL Strategy for Evaluation
         cl_strategy, evaluation = make_cl_strat(self.net)
+
+        # Distributed Client Evaluation
         results = []
-        print("------------------------Evaluating Client for Server on Updated Global Model on Test Set--------------------")
+        print(f"------------------------Local Client {self.partition_id} Evaluation on Updated Global Model--------------------")
         results.append(cl_strategy.eval(self.benchmark.test_stream))
-##        loss, accuracy = test(self.net, self.valloader)
         last_metrics = evaluation.get_last_metrics()
-        loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        accuracy = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
-        print("Results of Eval for GCF----------------------------------------------------------------")
-        print(results)
-        exp_acc = []
+        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
+        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+
+        # Getting Accuracy per Experience for client
+        curr_accpexp = []
         for res in results:
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
-                    exp_acc.append(float(acc))
+                    curr_accpexp.append(float(acc))
                     
+         # Calculating Forgetting Measures
+        global_eval_metrics = self.client_state.config_records["global_eval_metrics"]
+        hist_accpexp = global_eval_metrics["accuracy_per_exp"]
 
+        # Calculating Running Cumalative Forgetting Measure
+        cm_fmpexp = []
+        for i, e in enumerate(hist_accpexp):
+            e = json.loads(e)
+            fm = e[i] - curr_accpexp[i];
+            cm_fmpexp.append(fm)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else:
+            cmfm = 0
 
-        print("Eval of Client: ")
-        print("Loss: ", loss)
-        print("Acc: ", accuracy)
-        print("Per Exp Acc: ", exp_acc)
+        # Checking Cumalative Forgetting Measure
+        cprint("Check Cumalative FM", "blue")
+        cprint("History of Accuracy per Experience for this client")
+        print(json.dumps(hist_accpexp, indent=2))
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+        print(f"Cumalative Forgetting Measure: {cmfm}")
+ 
+        # Calculate Running Stepwise Forgetting Measure
+        sw_fmpexp = []
+        if hist_accpexp:
+            prev_accpexp = json.loads(hist_accpexp[-1])
+        else:
+            prev_accpexp = []
+        for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
+            sw_fmpexp.append(prev_acc - curr_acc)
+        swfm = sum(sw_fmpexp)/NUM_EXP
+
+        # Checking Stepwise Forgetting Measure
+        cprint("Check StepWise FM", "blue")
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
+        print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
+        print(f"StepWise Forgetting Measure: {swfm}")
 
         eval_dict_return = {
-                "accuracy": float(accuracy),
-                "loss": float(loss),
-                "ExpAccuracy": json.dumps(exp_acc),
+                "stream_accuracy": float(stream_acc),
+                "stream_loss": float(stream_loss),
+                "accuracy_per_experience": json.dumps(curr_accpexp),
+                "stepwise_forgetting_measure": float(swfm),
+                "cumalative_forgetting_measure":  float(cmfm),
+                "stepwise_forgetting_per_experience": json.dumps(sw_fmpexp),
+                "cumalative_forgetting_per_experience": json.dumps(cm_fmpexp),
                 "server_round": rnd,
                 "pid": self.partition_id,
                 }
 
-        return float(loss), sum(self.testlen_per_exp), eval_dict_return
+        # Printing Global Evaluation Results:
+        print(f"Global Distributed Evaluation of Client {self.partition_id}")
+        print(json.dumps(eval_dict_return, indent=4))
+
+        cprint("Logging Client States")
+        if rnd != 0:
+            if "accuracy_per_exp" not in global_eval_metrics:
+                global_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            else:
+                global_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
+            if "stream_accuracy" not in global_eval_metrics:
+                global_eval_metrics["stream_accuracy"] = [stream_acc]
+            else:
+                global_eval_metrics["stream_accuracy"].append(stream_acc)
+            if "stream_loss" not in global_eval_metrics:
+                global_eval_metrics["stream_loss"] = [stream_loss]
+            else:
+                global_eval_metrics["stream_loss"].append(stream_loss)
+            if "cumalative_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
+            else:
+                global_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
+            if "stepwise_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["stepwise_forgetting_measure"] = [swfm]
+            else:
+                global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            global_eval_metrics["rounds_selected"].append(rnd)
+
+        return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
 
 
 # Function that launches a Client
