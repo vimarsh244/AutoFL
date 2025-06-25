@@ -4,11 +4,30 @@ from torch.utils.data import DataLoader
 import flwr
 from flwr_datasets import FederatedDataset
 from avalanche.benchmarks import benchmark_from_datasets
-from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
+from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset, make_avalanche_dataset
 from clutils.make_experiences import split_dataset
 
-NUM_CLIENTS = 10
-BATCH_SIZE = 32
+from omegaconf import OmegaConf
+from pathlib import Path
+
+# Setup Config
+config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
+cfg = OmegaConf.load(config_path)
+
+NUM_CLIENTS = cfg.server.num_clients
+BATCH_SIZE = cfg.dataset.batch_size
+
+class TupleDataset(torch.utils.data.Dataset):
+    """Convert HuggingFace dataset format to tuple format for Avalanche"""
+    def __init__(self, hf_dataset):
+        self.dataset = hf_dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        return sample["img"], sample["label"]
 
 # Define different domain transformations
 DOMAIN_TRANSFORMS = {
@@ -33,10 +52,6 @@ DOMAIN_TRANSFORMS = {
     ])
 }
 
-def apply_transforms(batch, transform):
-    batch["img"] = [transform(img) for img in batch["img"]]
-    return batch
-
 def load_datasets(partition_id: int):
     fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
     partition = fds.load_partition(partition_id)
@@ -47,22 +62,34 @@ def load_datasets(partition_id: int):
     # Create experiences for each domain
     train_experiences = []
     for domain_name, transform in DOMAIN_TRANSFORMS.items():
-        # Apply domain-specific transform
-        domain_data = partition_train_test["train"].with_transform(
-            lambda x: apply_transforms(x, transform)
-        )
+        # Apply domain-specific transform with proper function
+        def apply_transforms_closure(batch, t=transform):
+            batch["img"] = [t(img) for img in batch["img"]]
+            return batch
+        
+        domain_data = partition_train_test["train"].with_transform(apply_transforms_closure)
+        # Convert to tuple format for Avalanche compatibility
+        domain_data_tuple = TupleDataset(domain_data)
+        # Convert to AvalancheDataset
+        domain_data_av = AvalancheDataset(domain_data_tuple)
         # Split into experiences
-        domain_experiences = split_dataset(domain_data, n_experiences=2)  # Split each domain into 2 experiences
+        domain_experiences = split_dataset(domain_data_av, n_experiences=2)  # Split each domain into 2 experiences
         train_experiences.extend(domain_experiences)
     
     # Create test experiences
     test_experiences = []
     testset = fds.load_split("test")
     for domain_name, transform in DOMAIN_TRANSFORMS.items():
-        domain_test = testset.with_transform(
-            lambda x: apply_transforms(x, transform)
-        )
-        test_experiences.append(domain_test)
+        def apply_transforms_closure_test(batch, t=transform):
+            batch["img"] = [t(img) for img in batch["img"]]
+            return batch
+        
+        domain_test = testset.with_transform(apply_transforms_closure_test)
+        # Convert to tuple format for Avalanche compatibility
+        domain_test_tuple = TupleDataset(domain_test)
+        # Convert to AvalancheDataset
+        domain_test_av = AvalancheDataset(domain_test_tuple)
+        test_experiences.append(domain_test_av)
     
     # Create benchmark
     benchmark = benchmark_from_datasets(

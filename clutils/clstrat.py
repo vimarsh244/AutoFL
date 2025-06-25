@@ -46,8 +46,9 @@ def make_cl_strat(net):
     )
 
     cl_strategy = Naive(
-        net, Adam(net.parameters()),
-        CrossEntropyLoss(), 
+        model=net, 
+        optimizer=Adam(net.parameters(), lr=cfg.training.learning_rate),
+        criterion=CrossEntropyLoss(), 
         train_mb_size=cfg.dataset.batch_size, 
         train_epochs=cfg.client.epochs, 
         eval_mb_size=cfg.dataset.batch_size,

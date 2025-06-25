@@ -49,19 +49,21 @@ BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 NUM_EXP = cfg.cl.num_experiences
 
-# Enable Green Print
+# Color print function
 def cprint(text, color="green"):
+    """Print text with color. Available colors: red, green, yellow, blue, magenta, cyan, white"""
     colors = {
-        "red": "\033[91m",
-        "green": "\033[92m",
-        "yellow": "\033[93m",
-        "blue": "\033[94m",
-        "magenta": "\033[95m",
-        "cyan": "\033[96m",
-        "white": "\033[97m",
-        "reset": "\033[0m",
+        'red': '\033[91m',
+        'green': '\033[92m',
+        'yellow': '\033[93m',
+        'blue': '\033[94m',
+        'magenta': '\033[95m',
+        'cyan': '\033[96m',
+        'white': '\033[97m',
+        'reset': '\033[0m'
     }
-    print(colors.get(color, colors["reset"]) + text + colors["reset"])
+    color_code = colors.get(color.lower(), colors['green'])
+    print(f"{color_code}{text}{colors['reset']}")
 
 def get_model():
     """Get model based on configuration"""
@@ -114,18 +116,37 @@ class FlowerClient(NumPyClient):
         cprint("FIT")
         print(f"Client {self.partition_id} Fit on round: {rnd}")
 
-        # Train on Experience as per Round
+        # Train on Experience as per Round - Fixed: Train on current experience only
         cprint("Starting Training")
         results = []
-        for i, experience in enumerate(self.benchmark.train_stream, start=1):
+        
+        # Handle different benchmark types
+        if hasattr(self.benchmark, 'train_stream'):
+            train_stream = self.benchmark.train_stream
+        elif hasattr(self.benchmark, 'train_datasets_stream'):
+            train_stream = self.benchmark.train_datasets_stream
+        else:
+            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
+            
+        for i, experience in enumerate(train_stream, start=1):
             if i == rnd:
                 print(f"EXP: {experience.current_experience}")
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
+                break  # Only train on current experience
 
         # Local Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-        results.append(self.cl_strategy.eval(self.benchmark.test_stream))
+        
+        # Handle different benchmark types for evaluation
+        if hasattr(self.benchmark, 'test_stream'):
+            test_stream = self.benchmark.test_stream
+        elif hasattr(self.benchmark, 'test_datasets_stream'):
+            test_stream = self.benchmark.test_datasets_stream
+        else:
+            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
+            
+        results.append(self.cl_strategy.eval(test_stream))
 
         # Calc Accuracy per Experience 
         curr_accpexp = []
@@ -168,7 +189,7 @@ class FlowerClient(NumPyClient):
             prev_accpexp = []
         for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
             sw_fmpexp.append(prev_acc - curr_acc)
-        swfm = sum(sw_fmpexp)/NUM_EXP
+        swfm = sum(sw_fmpexp)/NUM_EXP if sw_fmpexp else 0.0
 
         # Checking Stepwise Forgetting Measure
         cprint("Check StepWise FM", "blue")
@@ -294,12 +315,25 @@ def client_fn(context: Context) -> Client:
         # DomainCL: benchmark object
         benchmark = dataset_result
         n_experiences = cfg.cl.num_experiences
-        trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_stream]
-        testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_stream]
+        
+        # Handle CLScenario objects
+        if hasattr(benchmark, 'train_stream'):
+            # Standard benchmark
+            trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_stream]
+            testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_stream]
+        elif hasattr(benchmark, 'train_datasets_stream'):
+            # CLScenario object
+            trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_datasets_stream]
+            testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_datasets_stream]
+        else:
+            raise ValueError(f"Unknown benchmark type: {type(benchmark)}")
 
     # Print ClientID
-    print(f"---------------------------------LAUNCHING CLIENT: {partition_id}-----------------------------------------------")
+    print("------------------------------------------------ClientID: ", partition_id, "----------------------------------------------")
 
+    # Create a single Flower client representing a single organization
+    # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
+    # to convert it to a subclass of `flwr.client.Client`
     return FlowerClient(context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id).to_client()
 
 
