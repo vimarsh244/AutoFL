@@ -1,0 +1,41 @@
+client:
+  num_cpus: 4
+  num_gpus: 0.2
+  type: normal
+  epochs: 10
+  falloff: 0.0
+server:
+  num_clients: 5
+  fraction_fit: 1.0
+  fraction_eval: 1
+  min_fit: 5
+  min_eval: 5
+  num_rounds: 10
+  strategy: fedavg
+cl:
+  num_experiences: 8
+  strategy: domain
+  split: random
+model:
+  name: resnet
+  num_classes: 100
+dataset:
+  workload: cifar100
+  batch_size: 64
+  split: iid
+  niid:
+    alpha: 1.0
+    seed: 42
+  num_classes: 100
+wb:
+  project: autofl-testing
+  name: cifar100_domain_resnet_gpu
+defaults:
+- workload: cifar10
+- model: simple_cnn
+- _self_
+training:
+  batch_size: 32
+  learning_rate: 0.0001
+  epochs: 10
+  optimizer: adam

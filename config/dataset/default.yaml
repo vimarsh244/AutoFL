@@ -1,0 +1,7 @@
+workload: cifar10
+batch_size: 32
+num_classes: 10
+split: iid
+niid:
+  alpha: 1.0
+  seed: 42 

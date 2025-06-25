@@ -10,6 +10,11 @@ __pycache__/
 # C extensions
 *.so
 
+# WandB
+wandb
+log.txt
+templogs/
+
 # Distribution / packaging
 .Python
 build/
@@ -174,3 +179,11 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/pythonk
+
+
+## Logs and other files
+
+outputs/*
+autofl_env/*
+logs/*
+data/*
