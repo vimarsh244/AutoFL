@@ -16,9 +16,11 @@ from avalanche.training.supervised import Naive
 
 from omegaconf import OmegaConf
 from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from config_utils import load_config
 
-config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
-cfg = OmegaConf.load(config_path)
+cfg = load_config()
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

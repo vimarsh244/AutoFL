@@ -12,15 +12,29 @@ import numpy as np
 import json
 
 # Setup Config
-config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
-cfg = OmegaConf.load(config_path)
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from config_utils import load_config
+cfg = load_config()
 
-wandb.init(
-    project=cfg.wb.project,
-    name=cfg.wb.name,
-    config=OmegaConf.to_container(cfg, resolve=True)
-)
-
+# Only initialize wandb if mode is not disabled
+if cfg.wb.get('mode', 'online') != 'disabled':
+    wandb.init(
+        project=cfg.wb.project,
+        name=cfg.wb.name,
+        config=OmegaConf.to_container(cfg, resolve=True),
+        mode=cfg.wb.get('mode', 'online')
+    )
+else:
+    # Create a dummy run for disabled mode
+    class DummyWandB:
+        def log(self, *args, **kwargs):
+            pass
+        class plot:
+            @staticmethod
+            def confusion_matrix(*args, **kwargs):
+                return None
+    wandb = DummyWandB()
 
 NUM_ROUNDS = cfg.server.num_rounds
 LOCAL_EPOCHS = cfg.client.epochs
