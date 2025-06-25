@@ -22,6 +22,7 @@ from config_utils import load_config
 
 cfg = load_config()
 
+stratetgy = cfg.cl.strategy 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):

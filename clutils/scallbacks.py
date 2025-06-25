@@ -56,14 +56,16 @@ def fit_config(server_round: int):
 def eval_config(server_round: int):
     config = {
             "server_round": server_round,
-            "local_epochs": 3,
-            "num_rounds": NUM_ROUNDS
+            "local_epochs": cfg.client.epochs,
+            "num_rounds": cfg.server.num_rounds,
             }
     return config
 
 def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    losses = [num_examples * m["loss"] for num_examples, m in metrics]
+    client_accuracies = [m["stream_accuracy"] for _, m in metrics]
+    client_losses = [m["stream_loss"] for _, m in metrics]
+    w_accuracies = [num_examples * m["stream_accuracy"] for num_examples, m in metrics]
+    w_losses = [num_examples * m["stream_loss"] for num_examples, m in metrics]
     pid = [m["pid"] for _, m in metrics]
     rnd = metrics[0][1]["server_round"]
 
