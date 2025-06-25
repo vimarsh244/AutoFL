@@ -41,6 +41,10 @@ def load_cfg():
 cfg = load_cfg()
 print("Configuration Loaded:\n" + OmegaConf.to_yaml(cfg))
 
+# validate configuration
+from utils.model_factory import validate_config
+validate_config(cfg)
+
 # Save to temp config for other modules
 with open("temp_config.yaml", "w") as f:
     OmegaConf.save(cfg, f)
@@ -51,27 +55,9 @@ from mclserver import server_fn
 
 def get_model(cfg):
     """Get model based on configuration"""
-    # determine number of classes based on dataset
-    if cfg.dataset.workload in ["cifar100", "cifar100_v2"]:
-        num_classes = 100
-    elif cfg.dataset.workload in ["bdd100k", "bdd100k_v2", "bdd100k_10k", "kitti", "kitti_v2"]: # this should be like gotten from dataset config ideally, this is bad way to do it but fine for now ...
-        num_classes = cfg.dataset.get("num_classes", 10)
-    else:
-        num_classes = 10
-    
-    if cfg.model.name == "resnet":
-        from models.ResNet import ResNet
-        return ResNet(num_classes=num_classes)
-    elif cfg.model.name == "simple_cnn":
-        from models.SimpleCNN import Net
-        return Net()
-    elif cfg.model.name == "mobilenet":
-        from models.MobileNet import create_mobilenet
-        version = getattr(cfg.model, 'version', 'v2')
-        pretrained = getattr(cfg.model, 'pretrained', False)
-        return create_mobilenet(num_classes=num_classes, pretrained=pretrained, version=version)
-    else:
-        raise ValueError(f"Unknown model: {cfg.model.name}")
+    # use intelligent model factory
+    from utils.model_factory import create_model
+    return create_model(cfg)
 
 def main():
     client = ClientApp(client_fn=client_fn)

@@ -5,7 +5,7 @@ dataset:
   num_classes: 10
   split: niid
   niid:
-    alpha: 0.3  # moderate heterogeneity
+    alpha: 0.5  # moderate heterogeneity
 
 model:
   name: mobilenet
@@ -20,7 +20,7 @@ cl:
   
 training:
   learning_rate: 0.001  # good for mobilenet v2
-  epochs: 3  # faster testing
+  epochs: 10
 
 server:
   num_rounds: 4
@@ -36,4 +36,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: mobilenet_v2_replay_niid 
+  name: mobilenet_v2_replay_niid_0.5 

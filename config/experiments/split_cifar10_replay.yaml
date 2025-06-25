@@ -8,7 +8,8 @@ model:
   name: mobilenet
   version: v2
   pretrained: false
-  num_classes: 2  # classes per task (10 classes / 5 tasks = 2 per task)
+  # num_classes: 2  # classes per task (10 classes / 5 tasks = 2 per task)
+  # num_classes automatically determined: 2 per task (10 classes / 5 tasks)
 
 cl:
   strategy: replay
@@ -30,6 +31,7 @@ server:
 
 client:
   num_cpus: 4
+  num_gpus: 0.0
   epochs: 5
 
 wb:

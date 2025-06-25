@@ -24,7 +24,11 @@ from config_utils import load_config
 
 cfg = load_config()
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# Respect configuration: only use GPU if num_gpus > 0.0 AND CUDA is available
+if cfg.client.num_gpus > 0.0 and torch.cuda.is_available():
+    DEVICE = torch.device("cuda:0")
+else:
+    DEVICE = torch.device("cpu")
 
 def make_cl_strat(net):
     """create continual learning strategy based on configuration"""
@@ -40,7 +44,7 @@ def make_cl_strat(net):
         timing_metrics(epoch=True, epoch_running=True),
         forgetting_metrics(experience=True, stream=True),
         cpu_usage_metrics(experience=True),
-        disk_usage_metrics(minibatch=True, epoch=True, experience=True, stream=True),
+        # disk_usage_metrics(minibatch=True, epoch=True, experience=True, stream=True),
     ]
 
     eval_plugin = EvaluationPlugin(

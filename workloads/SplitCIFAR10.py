@@ -141,7 +141,16 @@ def load_datasets(partition_id: int):
     )
     
     print(f"created split cifar10 benchmark with {len(train_experiences)} tasks")
-    print(f"client {partition_id}: {sum(len(exp.dataset) for exp in benchmark.train_stream)} total training samples")
+    
+    # Handle different benchmark attribute names
+    if hasattr(benchmark, 'train_stream'):
+        total_samples = sum(len(exp.dataset) for exp in benchmark.train_stream)
+    elif hasattr(benchmark, 'train_datasets_stream'):
+        total_samples = sum(len(exp.dataset) for exp in benchmark.train_datasets_stream)
+    else:
+        total_samples = sum(len(exp) for exp in train_experiences)
+    
+    print(f"client {partition_id}: {total_samples} total training samples")
     
     return benchmark
 
@@ -149,15 +158,25 @@ def get_dataloaders(partition_id: int):
     """get data loaders for split cifar10 continual learning"""
     benchmark = load_datasets(partition_id)
     
+    # handle different benchmark attribute names
+    if hasattr(benchmark, 'train_stream'):
+        train_stream = benchmark.train_stream
+        test_stream = benchmark.test_stream
+    elif hasattr(benchmark, 'train_datasets_stream'):
+        train_stream = benchmark.train_datasets_stream
+        test_stream = benchmark.test_datasets_stream
+    else:
+        raise ValueError(f"Unknown benchmark type: {type(benchmark)}")
+    
     # create dataloaders for each experience
     train_loaders = []
-    for exp in benchmark.train_stream:
+    for exp in train_stream:
         train_loaders.append(
             DataLoader(exp.dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
         )
     
     test_loaders = []
-    for exp in benchmark.test_stream:
+    for exp in test_stream:
         test_loaders.append(
             DataLoader(exp.dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
         )
