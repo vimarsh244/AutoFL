@@ -9,6 +9,8 @@
 - [ ]  Basic Tests to ensure successful integration
 - [ ]  Extend Base for Benchmarks
     - [x]  Add Workloads → Look at [CIFAR10CL.py] on dev --> **implemented with this branch**
+        - [x]  **BDD100K domain incremental workload** → Real dataset integration with weather/time-of-day domains
+        - [x]  **KITTI domain incremental workload** → Autonomous driving scenarios
     - [ ]  Add Models → MobileNet, ResNet etc
     - [ ]  Add FL Strats
     - [ ]  Add CL Strats → Buffer Replay, EWC, Hybrid

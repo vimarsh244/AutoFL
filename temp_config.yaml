@@ -1,0 +1,40 @@
+client:
+  num_cpus: 8
+  num_gpus: 0.2
+  type: normal
+  epochs: 10
+  falloff: 0.0
+server:
+  num_clients: 5
+  fraction_fit: 1
+  fraction_eval: 1
+  min_fit: 5
+  min_eval: 5
+  num_rounds: 5
+  strategy: fedavg
+cl:
+  num_experiences: 8
+  strategy: domain
+  split: random
+model:
+  name: simple_cnn
+  num_classes: 10
+dataset:
+  workload: cifar10
+  batch_size: 32
+  split: iid
+  niid:
+    alpha: 1.0
+    seed: 42
+wb:
+  project: autofl-testing
+  name: cifar10_domain_simple_cnn
+defaults:
+- workload: cifar10
+- model: simple_cnn
+- _self_
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 5
+  optimizer: adam

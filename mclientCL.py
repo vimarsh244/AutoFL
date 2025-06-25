@@ -25,7 +25,8 @@ from flwr.common import Metrics, Context, ConfigRecord
 warnings.filterwarnings("ignore")
 
 #Setting up Configuration
-cfg = OmegaConf.load('config/config.yaml')
+from config_utils import load_config
+cfg = load_config()
 
 
 # Import workload based on configuration
@@ -40,6 +41,12 @@ elif cfg.dataset.workload == "bdd100k":
     from workloads.BDD100KDomainCL import load_datasets
 elif cfg.dataset.workload == "kitti":
     from workloads.KITTIDomainCL import load_datasets
+elif cfg.dataset.workload == "bdd100k_v2":
+    from workloads.BDD100KDomainCLV2 import load_datasets
+elif cfg.dataset.workload == "kitti_v2":
+    from workloads.KITTIDomainCLV2 import load_datasets
+elif cfg.dataset.workload == "bdd100k_10k":
+    from workloads.BDD100K10kDomainCL import load_datasets
 else:
     raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 
@@ -220,26 +227,27 @@ class FlowerClient(NumPyClient):
         # Logging Client State
         print("Logging Client States")
         if rnd != 0:
-            metrics = {}
-            metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
-            metrics["stream_accuracy"] = [stream_acc]
-            metrics["stream_loss"] = [stream_loss]
-            # metrics["cumalative_forgetting_measure"] = [cmfm]
-            metrics["stepwise_forgetting_measure"] = [swfm]
+            # Update the existing ConfigRecord instead of replacing it with a dict
+            current_acc_exp = [json.dumps(curr_accpexp)]
+            current_stream_acc = [stream_acc]
+            current_stream_loss = [stream_loss]
+            current_swfm = [swfm]
             
             # Update existing metrics if they exist
             if "accuracy_per_exp" in local_eval_metrics:
-                metrics["accuracy_per_exp"].extend(local_eval_metrics["accuracy_per_exp"])
+                current_acc_exp.extend(local_eval_metrics["accuracy_per_exp"])
             if "stream_accuracy" in local_eval_metrics:
-                metrics["stream_accuracy"].extend(local_eval_metrics["stream_accuracy"])
+                current_stream_acc.extend(local_eval_metrics["stream_accuracy"])
             if "stream_loss" in local_eval_metrics:
-                metrics["stream_loss"].extend(local_eval_metrics["stream_loss"])
-            if "cumalative_forgetting_measure" in local_eval_metrics:
-                metrics["cumalative_forgetting_measure"].extend(local_eval_metrics["cumalative_forgetting_measure"])
+                current_stream_loss.extend(local_eval_metrics["stream_loss"])
             if "stepwise_forgetting_measure" in local_eval_metrics:
-                metrics["stepwise_forgetting_measure"].extend(local_eval_metrics["stepwise_forgetting_measure"])
+                current_swfm.extend(local_eval_metrics["stepwise_forgetting_measure"])
             
-            self.client_state.config_records["local_eval_metrics"] = metrics
+            # Update the ConfigRecord directly
+            local_eval_metrics["accuracy_per_exp"] = current_acc_exp
+            local_eval_metrics["stream_accuracy"] = current_stream_acc
+            local_eval_metrics["stream_loss"] = current_stream_loss
+            local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
 
         print("Finished Fit")
         # Client Failure Provision

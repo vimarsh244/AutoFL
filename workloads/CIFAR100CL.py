@@ -13,8 +13,10 @@ from omegaconf import OmegaConf
 from pathlib import Path
 
 # Setup Config
-config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
-cfg = OmegaConf.load(config_path)
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from config_utils import load_config
+cfg = load_config()
 
 BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
