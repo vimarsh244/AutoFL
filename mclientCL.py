@@ -47,6 +47,10 @@ elif cfg.dataset.workload == "kitti_v2":
     from workloads.KITTIDomainCLV2 import load_datasets
 elif cfg.dataset.workload == "bdd100k_10k":
     from workloads.BDD100K10kDomainCL import load_datasets
+elif cfg.dataset.workload == "permuted_mnist":
+    from workloads.PermutedMNIST import load_datasets
+elif cfg.dataset.workload == "split_cifar10":
+    from workloads.SplitCIFAR10 import load_datasets
 else:
     raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 
@@ -80,6 +84,11 @@ def get_model():
     elif cfg.model.name == "simple_cnn":
         from models.SimpleCNN import Net
         return Net()
+    elif cfg.model.name == "mobilenet":
+        from models.MobileNet import create_mobilenet
+        version = getattr(cfg.model, 'version', 'v2')
+        pretrained = getattr(cfg.model, 'pretrained', False)
+        return create_mobilenet(num_classes=cfg.model.num_classes, pretrained=pretrained, version=version)
     else:
         raise ValueError(f"Unknown model: {cfg.model.name}")
 

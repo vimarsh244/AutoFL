@@ -24,9 +24,9 @@ server:
 
 client:
   num_cpus: 8
-  num_gpus: 0.33  # Share GPU among clients
+  num_gpus: 0.2  # Share GPU among clients
   epochs: 5
 
 wb:
-  project: autofl-gpu-testing  
+  project: autofl-testing  
   name: cifar100_naive_gpu 

@@ -12,7 +12,9 @@ from avalanche.evaluation.metrics import (
 from avalanche.logging import InteractiveLogger, TextLogger, TensorboardLogger
 from avalanche.training.plugins import EvaluationPlugin
 
-from avalanche.training.supervised import Naive
+# import all continual learning strategies
+from avalanche.training.supervised import Naive, EWC, Replay
+from avalanche.training.plugins import ReplayPlugin, EWCPlugin
 
 from omegaconf import OmegaConf
 from pathlib import Path
@@ -22,15 +24,13 @@ from config_utils import load_config
 
 cfg = load_config()
 
-stratetgy = cfg.cl.strategy 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def make_cl_strat(net):
-    # log to text file
-    # text_logger = TextLogger(open(f"{cfg.}"))
-    text_logger = TextLogger(open('logs/avalog2.txt', 'a'))
-
-    # print to stdout
+    """create continual learning strategy based on configuration"""
+    
+    # setup logging
+    text_logger = TextLogger(open('logs/avalog.txt', 'a'))
     interactive_logger = InteractiveLogger()
 
     # Only compute standard metrics (no confusion matrix)
@@ -48,14 +48,72 @@ def make_cl_strat(net):
         loggers=[interactive_logger, text_logger]
     )
 
-    cl_strategy = Naive(
-        model=net, 
-        optimizer=Adam(net.parameters(), lr=cfg.training.learning_rate),
-        criterion=CrossEntropyLoss(), 
-        train_mb_size=cfg.dataset.batch_size, 
-        train_epochs=cfg.client.epochs, 
-        eval_mb_size=cfg.dataset.batch_size,
-        evaluator=eval_plugin,
-        device=DEVICE
-    )
+    # get strategy configuration
+    strategy_name = getattr(cfg.cl, 'strategy', 'naive')
+    
+    # common strategy parameters
+    common_params = {
+        'model': net,
+        'optimizer': Adam(net.parameters(), lr=cfg.training.learning_rate),
+        'criterion': CrossEntropyLoss(),
+        'train_mb_size': cfg.dataset.batch_size,
+        'train_epochs': cfg.client.epochs,
+        'eval_mb_size': cfg.dataset.batch_size,
+        'evaluator': eval_plugin,
+        'device': DEVICE
+    }
+    
+    # create strategy based on configuration
+    if strategy_name == 'naive' or strategy_name == 'domain':
+        # standard naive strategy (domain is handled at dataset level)
+        cl_strategy = Naive(**common_params)
+        
+    elif strategy_name == 'ewc':
+        # elastic weight consolidation
+        ewc_lambda = getattr(cfg.cl, 'ewc_lambda', 0.4)  # default from literature
+        decay_factor = getattr(cfg.cl, 'ewc_decay_factor', None)
+        keep_importance_data = getattr(cfg.cl, 'ewc_keep_importance_data', False)
+        
+        cl_strategy = EWC(
+            ewc_lambda=ewc_lambda,
+            decay_factor=decay_factor,
+            keep_importance_data=keep_importance_data,
+            **common_params
+        )
+        
+    elif strategy_name == 'replay':
+        # experience replay
+        mem_size = getattr(cfg.cl, 'replay_mem_size', 200)  # buffer size
+        
+        cl_strategy = Replay(
+            mem_size=mem_size,
+            **common_params
+        )
+        
+    elif strategy_name == 'hybrid':
+        # hybrid: ewc + replay
+        ewc_lambda = getattr(cfg.cl, 'ewc_lambda', 0.4)
+        mem_size = getattr(cfg.cl, 'replay_mem_size', 200)
+        
+        # create plugins for hybrid approach
+        plugins = [
+            EWCPlugin(ewc_lambda=ewc_lambda),
+            ReplayPlugin(mem_size=mem_size)
+        ]
+        
+        cl_strategy = Naive(
+            plugins=plugins,
+            **common_params
+        )
+        
+    else:
+        print(f"warning: unknown strategy '{strategy_name}', falling back to naive")
+        cl_strategy = Naive(**common_params)
+    
+    print(f"created continual learning strategy: {strategy_name}")
+    if hasattr(cfg.cl, 'ewc_lambda'):
+        print(f"  ewc lambda: {cfg.cl.ewc_lambda}")
+    if hasattr(cfg.cl, 'replay_mem_size'):
+        print(f"  replay buffer size: {cfg.cl.replay_mem_size}")
+    
     return cl_strategy, eval_plugin
