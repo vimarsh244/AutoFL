@@ -32,6 +32,7 @@ server:
 
 client:
   num_cpus: 4
+  num_gpus: 0.0
   epochs: 3
 
 wb:

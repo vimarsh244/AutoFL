@@ -31,8 +31,8 @@ server:
 
 client:
   num_cpus: 4
-  num_gpus: 0.0
-  epochs: 5
+  num_gpus: 0.2
+  epochs: 10
 
 wb:
   project: autofl-testing

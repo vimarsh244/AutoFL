@@ -178,10 +178,18 @@ class FlowerClient(NumPyClient):
 
         # Get Local Eval Metrics from Avalanche
         last_metrics = self.evaluation.get_last_metrics()
+        print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
+        
+        # Handle different stream naming conventions
+        stream_suffix = "/eval_phase/test_stream"
+        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
+            stream_suffix = "/eval_phase/test_datasets_stream"
+        
         # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
-        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
-        stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
+        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
+        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
+        # DiskUsage disabled to avoid permission errors
+        stream_disc_usage = last_metrics.get(f"DiskUsage_Stream{stream_suffix}", 0.0)
 
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -293,8 +301,14 @@ class FlowerClient(NumPyClient):
         
         results.append(cl_strategy.eval(test_stream))
         last_metrics = evaluation.get_last_metrics()
-        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+        
+        # Handle different stream naming conventions
+        stream_suffix = "/eval_phase/test_stream"
+        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
+            stream_suffix = "/eval_phase/test_datasets_stream"
+            
+        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
+        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
 
         # Getting Accuracy per Experience for client
         curr_accpexp = []

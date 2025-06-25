@@ -157,7 +157,7 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
     else:
         wandb_conf_matrix = None
 
-    # Log to wandb
+    # Log to wandb - fix the list logging issue
     log_dict = {
         "global/accuracy": avg_acc,
         "global/loss": avg_loss,
@@ -165,9 +165,12 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
         "global/stepwise_forgetting": avg_stepwise_forgetting,
         "global/BWT": bwt,
         "global/FWT": fwt,
-        "global/experience_accuracy": avg_exp_acc,
         "round": rnd,
     }
+    
+    # Log per-experience accuracy as individual metrics instead of a list
+    for i, exp_acc in enumerate(avg_exp_acc):
+        log_dict[f"global/experience_{i+1}_accuracy"] = exp_acc
     
     # Add individual client metrics
     for i, (client_id, _, m) in enumerate(zip(client_ids, range(len(metrics)), [m for _, m in metrics])):
