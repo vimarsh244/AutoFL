@@ -32,37 +32,37 @@ def test_cifar10_regular():
         n_experiences = 3  # Use fewer experiences for testing
         train_experiences = split_dataset(train_data, n_experiences)
         test_experiences = split_dataset(test_data, n_experiences)
-        print(f"✓ Created {len(train_experiences)} train experiences")
-        print(f"✓ Created {len(test_experiences)} test experiences")
+        print(f"Created {len(train_experiences)} train experiences")
+        print(f"Created {len(test_experiences)} test experiences")
         
         # Create benchmark
         benchmark = benchmark_from_datasets(train=train_experiences, test=test_experiences)
-        print("✓ Created benchmark")
+        print("Created benchmark")
         
         # Create model and strategy
         net = Net()
         cl_strategy, eval_plugin = make_cl_strat(net)
-        print(f"✓ Created model with {sum(p.numel() for p in net.parameters())} parameters")
-        print(f"✓ Learning rate: {cl_strategy.optimizer.param_groups[0]['lr']}")
+        print(f"Created model with {sum(p.numel() for p in net.parameters())} parameters")
+        print(f"Learning rate: {cl_strategy.optimizer.param_groups[0]['lr']}")
         
         # Test training on first experience
         for i, experience in enumerate(benchmark.train_stream):
             if i == 0:  # Only train on first experience
-                print(f"✓ Training on experience {experience.current_experience}")
+                print(f"Training on experience {experience.current_experience}")
                 result = cl_strategy.train(experience)
-                print("✓ Training completed successfully")
+                print("Training completed successfully")
                 
                 # Check if loss decreased
                 if result and 'Loss_Epoch/train_phase/train_stream' in result:
                     final_loss = result['Loss_Epoch/train_phase/train_stream']
-                    print(f"✓ Final training loss: {final_loss}")
+                    print(f"Final training loss: {final_loss}")
                 break
         
-        print("✓ Regular CIFAR10 CL test PASSED")
+        print("Regular CIFAR10 CL test PASSED")
         return True
         
     except Exception as e:
-        print(f"✗ Regular CIFAR10 CL test FAILED: {e}")
+        print(f"Regular CIFAR10 CL test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -78,34 +78,34 @@ def test_cifar10_domain():
         
         # Load datasets
         benchmark = load_datasets(partition_id=0)
-        print(f"✓ Loaded domain CL benchmark")
-        print(f"✓ Train experiences: {len(list(benchmark.train_datasets_stream))}")
-        print(f"✓ Test experiences: {len(list(benchmark.test_datasets_stream))}")
+        print(f"Loaded domain CL benchmark")
+        print(f"Train experiences: {len(list(benchmark.train_datasets_stream))}")
+        print(f"Test experiences: {len(list(benchmark.test_datasets_stream))}")
         
         # Create model and strategy
         net = Net()
         cl_strategy, eval_plugin = make_cl_strat(net)
-        print(f"✓ Created model with {sum(p.numel() for p in net.parameters())} parameters")
-        print(f"✓ Learning rate: {cl_strategy.optimizer.param_groups[0]['lr']}")
+        print(f"Created model with {sum(p.numel() for p in net.parameters())} parameters")
+        print(f"Learning rate: {cl_strategy.optimizer.param_groups[0]['lr']}")
         
         # Test training on first experience
         for i, experience in enumerate(benchmark.train_datasets_stream):
             if i == 0:  # Only train on first experience
-                print(f"✓ Training on experience {experience.current_experience}")
+                print(f"Training on experience {experience.current_experience}")
                 result = cl_strategy.train(experience)
-                print("✓ Training completed successfully")
+                print("Training completed successfully")
                 
                 # Check if loss decreased
                 if result and 'Loss_Epoch/train_phase/train_stream' in result:
                     final_loss = result['Loss_Epoch/train_phase/train_stream']
-                    print(f"✓ Final training loss: {final_loss}")
+                    print(f"Final training loss: {final_loss}")
                 break
         
-        print("✓ CIFAR10 Domain CL test PASSED")
+        print("CIFAR10 Domain CL test PASSED")
         return True
         
     except Exception as e:
-        print(f"✗ CIFAR10 Domain CL test FAILED: {e}")
+        print(f"CIFAR10 Domain CL test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -124,9 +124,9 @@ def main():
     print(f"CIFAR10 Domain CL:  {'PASSED' if test2_passed else 'FAILED'}")
     
     if test1_passed and test2_passed:
-        print("🎉 ALL TESTS PASSED! Training is now functional.")
+        print("ALL TESTS PASSED! Training is now functional.")
     else:
-        print("❌ Some tests failed. Please check the error messages above.")
+        print("Some tests failed. Please check the error messages above.")
     
     print("="*50)
 

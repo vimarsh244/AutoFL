@@ -20,6 +20,7 @@ BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 
 class TupleDataset(torch.utils.data.Dataset):
+    """Convert HuggingFace dataset format to tuple format for Avalanche"""
     def __init__(self, hf_dataset):
         self.dataset = hf_dataset
 
@@ -67,9 +68,13 @@ def load_datasets(partition_id: int):
     # Create train/val for each partition and wrap it into DataLoader
     partition_train_test = partition_train_test.with_transform(apply_transforms)
 
+    # Convert to tuple format for Avalanche compatibility
+    train_tuple = TupleDataset(partition_train_test["train"])
+    test_tuple = TupleDataset(partition_train_test["test"])
+
     # Wrap in Avalanche Dataset
-    train_CIFAR = make_avalanche_dataset(partition_train_test["train"])
-    test_CIFAR = make_avalanche_dataset(partition_train_test["test"])
+    train_CIFAR = AvalancheDataset(train_tuple)
+    test_CIFAR = AvalancheDataset(test_tuple)
 
     trainloader = DataLoader(
         partition_train_test["train"], batch_size=BATCH_SIZE, shuffle=True
@@ -77,4 +82,4 @@ def load_datasets(partition_id: int):
     valloader = DataLoader(partition_train_test["test"], batch_size=BATCH_SIZE)
     testset = fds.load_split("test").with_transform(apply_transforms)
     testloader = DataLoader(testset, batch_size=BATCH_SIZE)
-    return TupleDataset(partition_train_test["train"]), TupleDataset(partition_train_test["test"]) 
+    return train_CIFAR, test_CIFAR 
