@@ -3,6 +3,9 @@ dataset:
   workload: cifar100
   batch_size: 64
   num_classes: 100
+  split: niid
+  niid:
+    alpha: 0.9  # moderate heterogeneity
 
 model:
   name: resnet
@@ -30,4 +33,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: f_cifar100_domain_resnet_gpu 
+  name: f_cifar100_domain_resnet_niid_0.9_gpu 
