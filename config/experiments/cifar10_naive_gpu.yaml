@@ -3,6 +3,7 @@ dataset:
   workload: cifar10
   batch_size: 128  # Large batch for GPU
   num_classes: 10
+  split: iid
 
 model:
   name: resnet  # ResNet for better GPU utilization
@@ -22,7 +23,7 @@ server:
   min_fit: 5  # Match num_clients
   min_eval: 5  # Match num_clients
 
-  strategy: fedprox
+  strategy: fedavg
 
 client:
   num_cpus: 4
@@ -31,4 +32,4 @@ client:
 
 wb:
   project: autofl-testing  
-  name: f_cifar10_naive_fedprox_gpu 
+  name: f_cifar10_naive_fedavg_gpu 
