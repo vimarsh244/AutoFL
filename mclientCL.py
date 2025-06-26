@@ -18,6 +18,7 @@ from avalanche.benchmarks.utils.utils import as_avalanche_dataset
 # Flower Imports
 import flwr
 import torch
+import gc  # For garbage collection
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
@@ -47,16 +48,42 @@ elif cfg.dataset.workload == "kitti_v2":
     from workloads.KITTIDomainCLV2 import load_datasets
 elif cfg.dataset.workload == "bdd100k_10k":
     from workloads.BDD100K10kDomainCL import load_datasets
+elif cfg.dataset.workload == "permuted_mnist":
+    from workloads.PermutedMNIST import load_datasets
+elif cfg.dataset.workload == "rotated_mnist":
+    from workloads.RotatedMNIST import load_datasets
+elif cfg.dataset.workload == "mnist":
+    from workloads.MNIST import load_datasets
+elif cfg.dataset.workload == "split_cifar10":
+    from workloads.SplitCIFAR10 import load_datasets
+elif cfg.dataset.workload == "split_cifar100":
+    from workloads.SplitCIFAR100 import load_datasets
+elif cfg.dataset.workload == "core50":
+    from workloads.CORe50 import load_datasets
 else:
     raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 
 # Setting Global Variables
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# Respect configuration: only use GPU if num_gpus > 0.0 AND CUDA is available
+if cfg.client.num_gpus > 0.0 and torch.cuda.is_available():
+    DEVICE = torch.device("cuda:0")
+    print(f"Using GPU: {DEVICE}")
+else:
+    DEVICE = torch.device("cpu")
+    print(f"Using CPU: {DEVICE}")
+    
 BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 NUM_EXP = cfg.cl.num_experiences
 
 # Color print function
+def clear_memory():
+    """Clear CUDA memory and run garbage collection"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    gc.collect()
+
 def cprint(text, color="green"):
     """Print text with color. Available colors: red, green, yellow, blue, magenta, cyan, white"""
     colors = {
@@ -74,14 +101,9 @@ def cprint(text, color="green"):
 
 def get_model():
     """Get model based on configuration"""
-    if cfg.model.name == "resnet":
-        from models.ResNet import ResNet
-        return ResNet(num_classes=cfg.model.num_classes)
-    elif cfg.model.name == "simple_cnn":
-        from models.SimpleCNN import Net
-        return Net()
-    else:
-        raise ValueError(f"Unknown model: {cfg.model.name}")
+    # use intelligent model factory
+    from utils.model_factory import create_model
+    return create_model(cfg)
 
 # Persistent State of Clients
 partition_strategies = [make_cl_strat(get_model().to(DEVICE)) for _ in range(NUM_CLIENTS)]
@@ -143,8 +165,12 @@ class FlowerClient(NumPyClient):
         else:
             raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
             
-        for i, experience in enumerate(train_stream, start=1):
-            if i == rnd:
+        # Calculate which experience to train on (cycle through available experiences)
+        experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+        print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
+        
+        for i, experience in enumerate(train_stream):
+            if i == experience_idx:
                 print(f"EXP: {experience.current_experience}")
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
@@ -172,10 +198,18 @@ class FlowerClient(NumPyClient):
 
         # Get Local Eval Metrics from Avalanche
         last_metrics = self.evaluation.get_last_metrics()
+        print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
+        
+        # Handle different stream naming conventions
+        stream_suffix = "/eval_phase/test_stream"
+        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
+            stream_suffix = "/eval_phase/test_datasets_stream"
+        
         # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
-        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
-        stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
+        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
+        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
+        # DiskUsage disabled to avoid permission errors
+        stream_disc_usage = last_metrics.get(f"DiskUsage_Stream{stream_suffix}", 0.0)
 
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -259,11 +293,18 @@ class FlowerClient(NumPyClient):
             local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
 
         print("Finished Fit")
+        
+        # MEMORY CLEANUP - clear CUDA cache and run garbage collection
+        clear_memory()
+        print(f"Memory cleared after fit round {rnd}")
+        
         # Client Failure Provision
         if random.random() < cfg.client.falloff:
             return None
         else:
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
+            # Use the same cycling logic for experience length
+            experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
@@ -278,32 +319,44 @@ class FlowerClient(NumPyClient):
         # Distributed Client Evaluation
         results = []
         print(f"------------------------Local Client {self.partition_id} Evaluation on Updated Global Model--------------------")
-        results.append(cl_strategy.eval(self.benchmark.test_stream))
+        
+        # Handle different benchmark types
+        if hasattr(self.benchmark, 'test_stream'):
+            test_stream = self.benchmark.test_stream
+        else:
+            test_stream = self.benchmark.test_datasets_stream
+        
+        results.append(cl_strategy.eval(test_stream))
         last_metrics = evaluation.get_last_metrics()
-        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+        
+        # Handle different stream naming conventions
+        stream_suffix = "/eval_phase/test_stream"
+        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
+            stream_suffix = "/eval_phase/test_datasets_stream"
+            
+        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
+        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
 
         # Getting Accuracy per Experience for client
         curr_accpexp = []
         for res in results:
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
-                    exp_acc.append(float(acc))
-
+                    curr_accpexp.append(float(acc))
 
         print("Eval of Client: ")
-        print("Loss: ", loss)
-        print("Acc: ", accuracy)
-        print("Per Exp Acc: ", exp_acc)
+        print("Loss: ", stream_loss)
+        print("Acc: ", stream_acc)
+        print("Per Exp Acc: ", curr_accpexp)
 
         eval_dict_return = {
                 "stream_accuracy": float(stream_acc),
                 "stream_loss": float(stream_loss),
                 "accuracy_per_experience": json.dumps(curr_accpexp),
-                "stepwise_forgetting_measure": float(swfm),
-                "cumalative_forgetting_measure":  float(cmfm),
-                "stepwise_forgetting_per_experience": json.dumps(sw_fmpexp),
-                "cumalative_forgetting_per_experience": json.dumps(cm_fmpexp),
+                "stepwise_forgetting_measure": 0.0,  # not calculated in eval
+                "cumalative_forgetting_measure": 0.0,  # not calculated in eval
+                "stepwise_forgetting_per_experience": json.dumps([]),  # not calculated in eval
+                "cumalative_forgetting_per_experience": json.dumps([]),  # not calculated in eval
                 "server_round": rnd,
                 "pid": self.partition_id,
                 }
@@ -313,28 +366,11 @@ class FlowerClient(NumPyClient):
         print(json.dumps(eval_dict_return, indent=4))
 
         cprint("Logging Client States")
-        if rnd != 0:
-            if "accuracy_per_exp" not in global_eval_metrics:
-                global_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
-            else:
-                global_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
-            if "stream_accuracy" not in global_eval_metrics:
-                global_eval_metrics["stream_accuracy"] = [stream_acc]
-            else:
-                global_eval_metrics["stream_accuracy"].append(stream_acc)
-            if "stream_loss" not in global_eval_metrics:
-                global_eval_metrics["stream_loss"] = [stream_loss]
-            else:
-                global_eval_metrics["stream_loss"].append(stream_loss)
-            if "cumalative_forgetting_measure" not in global_eval_metrics:
-                global_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
-            else:
-                global_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
-            if "stepwise_forgetting_measure" not in global_eval_metrics:
-                global_eval_metrics["stepwise_forgetting_measure"] = [swfm]
-            else:
-                global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
-            global_eval_metrics["rounds_selected"].append(rnd)
+        # Note: global evaluation metrics logging disabled for now
+
+        # MEMORY CLEANUP - clear CUDA cache and run garbage collection  
+        clear_memory()
+        print(f"Memory cleared after evaluation round {rnd}")
 
         return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
 
@@ -348,7 +384,6 @@ def client_fn(context: Context) -> Client:
     # Grab Partition Data
     partition_id = context.node_config["partition-id"]
 
-    # --- Robust dataset loading for both DomainCL and regular CL ---
     # load_datasets may return a tuple (train_data, test_data) or a benchmark object
     dataset_result = load_datasets(partition_id=partition_id)
 

@@ -22,6 +22,8 @@ server:
   min_fit: 5
   min_eval: 5
 
+  strategy: fedprox
+
 client:
   num_cpus: 4
   num_gpus: 0.2  # 20% GPU per client (5 clients share 1 GPU)
@@ -29,4 +31,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: cifar10_domain_resnet_gpu 
+  name: f_cifar10_domain_resnet_fedprox_gpu 

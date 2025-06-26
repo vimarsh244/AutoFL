@@ -1,5 +1,9 @@
 # Quick Start Guide for Domain Incremental Workloads
 
+
+# THIS IS OLD ignore it for now
+
+
 This guide will help you quickly get started with the domain incremental workloads for Continual Federated Learning.
 
 ## Installation
@@ -141,28 +145,3 @@ wandb.log({
     "domain": domain_name
 })
 ```
-
-## Next Steps
-
-1. Read the full documentation in `documentation/domain_incremental_workloads.md`
-2. Experiment with different domain combinations
-3. Try different model architectures
-4. Implement custom evaluation metrics
-
-## Getting Help
-
-- Check the [full documentation](domain_incremental_workloads.md)
-- Open an issue on GitHub
-- Contact the maintainers
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-Remember to:
-- Add tests for new features
-- Update documentation
-- Follow the code style guide 

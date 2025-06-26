@@ -28,5 +28,5 @@ client:
   epochs: 5
 
 wb:
-  project: autofl-gpu-testing  
+  project: autofl-testing  
   name: cifar10_naive_gpu 

@@ -33,13 +33,20 @@ def load_cfg():
                 print(f"[Config] File {candidate} not found. Using only base config.")
     
     if exp_cfg is not None:
-        cfg = OmegaConf.merge(base_cfg, exp_cfg)
+        cfg = OmegaConf.merge(base_cfg, exp_cfg)  # exp_cfg overrides base_cfg
+        print(f"[Config] Loaded experiment config: {cfg_name}")
+        print(f"[Config] Model from experiment: {cfg.model.name}")
     else:
         cfg = base_cfg
+        print(f"[Config] Using base config only")
     return cfg
 
 cfg = load_cfg()
 print("Configuration Loaded:\n" + OmegaConf.to_yaml(cfg))
+
+# validate configuration
+from utils.model_factory import validate_config
+validate_config(cfg)
 
 # Save to temp config for other modules
 with open("temp_config.yaml", "w") as f:
@@ -51,21 +58,9 @@ from mclserver import server_fn
 
 def get_model(cfg):
     """Get model based on configuration"""
-    if cfg.model.name == "resnet":
-        from models.ResNet import ResNet
-        # Determine number of classes based on dataset
-        if cfg.dataset.workload in ["cifar100", "cifar100_v2"]:
-            num_classes = 100
-        elif cfg.dataset.workload in ["bdd100k", "bdd100k_v2", "bdd100k_10k", "kitti", "kitti_v2"]:
-            num_classes = cfg.dataset.get("num_classes", 10)
-        else:
-            num_classes = 10
-        return ResNet(num_classes=num_classes)
-    elif cfg.model.name == "simple_cnn":
-        from models.SimpleCNN import Net
-        return Net()
-    else:
-        raise ValueError(f"Unknown model: {cfg.model.name}")
+    # use intelligent model factory
+    from utils.model_factory import create_model
+    return create_model(cfg)
 
 def main():
     client = ClientApp(client_fn=client_fn)
