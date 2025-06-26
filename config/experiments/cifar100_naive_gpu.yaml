@@ -5,7 +5,11 @@ dataset:
   num_classes: 100
 
 model:
-  name: resnet  # ResNet for better performance on CIFAR100
+  # name: resnet  # ResNet for better performance on CIFAR100
+  name: mobilenet
+  version: v3_large
+  pretrained: false
+  num_classes: 100
 
 cl:
   strategy: naive
@@ -16,11 +20,11 @@ training:
   epochs: 5
 
 server:
-  num_rounds: 5
-  num_clients: 3  # Balanced for GPU memory
+  num_rounds: 10
+  num_clients: 5  # Balanced for GPU memory
   fraction_fit: 1.0
-  min_fit: 3  # Match num_clients
-  min_eval: 3  # Match num_clients
+  min_fit: 5  # Match num_clients
+  min_eval: 5  # Match num_clients
 
 client:
   num_cpus: 8
@@ -29,4 +33,4 @@ client:
 
 wb:
   project: autofl-testing  
-  name: cifar100_naive_gpu 
+  name: f_cifar100_naive_mobilenetv3large_gpu 

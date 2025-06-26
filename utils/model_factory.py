@@ -137,7 +137,29 @@ def create_model(cfg):
     
     print(f"creating {cfg.model.name} with {model_classes} output classes, {input_channels} input channels, {input_size}x{input_size} input size")
     
-    if cfg.model.name == "resnet":
+    # Add configuration validation for MobileNet to prevent mismatches
+    if cfg.model.name == "mobilenet":
+        version = getattr(cfg.model, 'version', 'v2')
+        pretrained = getattr(cfg.model, 'pretrained', False)
+        
+        # Additional validation
+        print(f"MobileNet config: version={version}, pretrained={pretrained}, classes={model_classes}")
+        
+        if version not in ['v2', 'v3_small', 'v3_large']:
+            raise ValueError(f"unsupported mobilenet version: {version}")
+        
+        from models.MobileNet import create_mobilenet
+        model = create_mobilenet(
+            num_classes=model_classes, 
+            pretrained=pretrained, 
+            version=version
+        )
+        
+        # Validate the created model
+        print(f"Created MobileNet: {sum(p.numel() for p in model.parameters()):,} parameters")
+        return model
+    
+    elif cfg.model.name == "resnet":
         from models.ResNet import ResNet
         return ResNet(num_classes=model_classes)
     
@@ -145,16 +167,6 @@ def create_model(cfg):
         from models.SimpleCNN import create_simple_cnn
         input_size = workload_info.get('input_size', 32)  # default to CIFAR size
         return create_simple_cnn(num_classes=model_classes, in_channels=input_channels, input_size=input_size)
-    
-    elif cfg.model.name == "mobilenet":
-        from models.MobileNet import create_mobilenet
-        version = getattr(cfg.model, 'version', 'v2')
-        pretrained = getattr(cfg.model, 'pretrained', False)
-        return create_mobilenet(
-            num_classes=model_classes, 
-            pretrained=pretrained, 
-            version=version
-        )
     
     else:
         raise ValueError(f"unknown model: {cfg.model.name}")

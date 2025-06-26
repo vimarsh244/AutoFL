@@ -33,9 +33,12 @@ def load_cfg():
                 print(f"[Config] File {candidate} not found. Using only base config.")
     
     if exp_cfg is not None:
-        cfg = OmegaConf.merge(base_cfg, exp_cfg)
+        cfg = OmegaConf.merge(base_cfg, exp_cfg)  # exp_cfg overrides base_cfg
+        print(f"[Config] Loaded experiment config: {cfg_name}")
+        print(f"[Config] Model from experiment: {cfg.model.name}")
     else:
         cfg = base_cfg
+        print(f"[Config] Using base config only")
     return cfg
 
 cfg = load_cfg()

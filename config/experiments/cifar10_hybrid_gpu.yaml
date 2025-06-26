@@ -1,4 +1,9 @@
 # cifar10 with hybrid continual learning (ewc + replay) and gpu
+
+# Hydra defaults - ensure experiment config takes precedence  
+defaults:
+  - _self_
+
 dataset:
   workload: cifar10
   batch_size: 128  # large batch for gpu
@@ -9,8 +14,8 @@ dataset:
 
 model:
   name: mobilenet
-  version: v3_small
-  pretrained: true
+  version: v2  # Use v2 for better stability
+  pretrained: false  # Disable pretrained to avoid parameter conflicts
   num_classes: 10
 
 cl:
@@ -24,7 +29,7 @@ training:
   epochs: 5
 
 server:
-  num_rounds: 8
+  num_rounds: 10
   num_clients: 4
   strategy: fedavg
   fraction_fit: 1.0

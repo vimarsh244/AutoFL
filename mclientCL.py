@@ -149,8 +149,12 @@ class FlowerClient(NumPyClient):
         else:
             raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
             
-        for i, experience in enumerate(train_stream, start=1):
-            if i == rnd:
+        # Calculate which experience to train on (cycle through available experiences)
+        experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+        print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
+        
+        for i, experience in enumerate(train_stream):
+            if i == experience_idx:
                 print(f"EXP: {experience.current_experience}")
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
@@ -277,7 +281,9 @@ class FlowerClient(NumPyClient):
         if random.random() < cfg.client.falloff:
             return None
         else:
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
+            # Use the same cycling logic for experience length
+            experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):

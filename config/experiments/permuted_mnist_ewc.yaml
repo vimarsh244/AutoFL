@@ -20,17 +20,18 @@ training:
   epochs: 5
 
 server:
-  num_rounds: 5
-  num_clients: 3
+  num_rounds: 10
+  num_clients: 5
   strategy: fedavg
   fraction_fit: 1.0
-  min_fit: 3
-  min_eval: 3
+  min_fit: 5
+  min_eval: 5
 
 client:
-  num_cpus: 4
+  num_cpus: 8
+  num_gpus: 0.0
   epochs: 5
 
 wb:
   project: autofl-testing
-  name: permuted_mnist_ewc 
+  name: f_permuted_mnist_ewc 
