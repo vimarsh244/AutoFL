@@ -5,12 +5,12 @@ num_classes: 10  # auto-detected based on workload
 
 # data distribution options
 split: iid  # iid, niid, to still implement and test properly: niid_label, niid_quantity 
-# niid:
-#   alpha: 1.0  # dirichlet concentration parameter (lower = more heterogeneous)
-#   min_samples: 10  # minimum samples per client
-#   seed: 7
+## niid:
+##   alpha: 1.0  # dirichlet concentration parameter (lower = more heterogeneous)
+##   min_samples: 10  # minimum samples per client
+##   seed: 7
   
-#   # label-based non-iid options
+##   # label-based non-iid options
 #   classes_per_client: 2  # for niid_label distribution
   
 #   # quantity-based non-iid options

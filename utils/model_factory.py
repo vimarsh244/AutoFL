@@ -103,6 +103,19 @@ def get_workload_info(workload_name, cl_strategy, num_experiences):
             'task_type': 'domain',
             'input_channels': 3,  # RGB images
             'input_size': 224
+        },
+        
+        # continual learning specific datasets
+        'core50': {
+            'total_classes': 50,  # 50 domestic objects
+            'classes_per_task': lambda scenario: {
+                'ni': 50,        # New Instances: all 50 classes in each task
+                'nc': 5,         # New Classes: 5 classes per task (except first which has 10)
+                'nic': 'variable' # New Instances and Classes: mixed
+            }.get(scenario, 50),
+            'task_type': 'continual',
+            'input_channels': 3,  # RGB images
+            'input_size': 128   # Native CORe50 resolution
         }
     }
     
@@ -188,6 +201,18 @@ def create_model(cfg):
         from models.SimpleCNN import create_simple_cnn
         input_size = workload_info.get('input_size', 32)  # default to CIFAR size
         return create_simple_cnn(num_classes=model_classes, in_channels=input_channels, input_size=input_size)
+    
+    elif cfg.model.name == "wide_resnet":
+        from models.WideResNet import WideResNet28_10, WideResNet40_2, WideResNet16_8
+        # Choose configuration based on dataset
+        if 'cifar100' in cfg.dataset.workload or model_classes >= 50:
+            # Use larger model for CIFAR100 or datasets with many classes
+            print("Using Wide ResNet 28-10 for CIFAR100/complex datasets")
+            return WideResNet28_10(num_classes=model_classes)
+        else:
+            # Use smaller model for simpler datasets
+            print("Using Wide ResNet 40-2 for simpler datasets")
+            return WideResNet40_2(num_classes=model_classes)
     
     else:
         raise ValueError(f"unknown model: {cfg.model.name}")

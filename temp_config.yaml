@@ -1,8 +1,8 @@
 client:
   num_cpus: 8
-  num_gpus: 0.2
+  num_gpus: 0.4
   type: normal
-  epochs: 10
+  epochs: 15
   falloff: 0.0
 server:
   num_clients: 5
@@ -10,7 +10,7 @@ server:
   fraction_eval: 1
   min_fit: 5
   min_eval: 5
-  num_rounds: 15
+  num_rounds: 25
   strategy: fedavg
 cl:
   num_experiences: 10
@@ -20,7 +20,7 @@ cl:
   ewc_decay_factor: null
   ewc_keep_importance_data: false
 model:
-  name: resnet
+  name: wide_resnet
   num_classes: 10
   pretrained: false
 dataset:
@@ -33,7 +33,7 @@ dataset:
   num_classes: 100
 wb:
   project: autofl-testing
-  name: f_split_cifar100_ewc_resnet_fedavg_gpu
+  name: f_split_cifar100_wide_resnet_ewc_fedavg
 defaults:
 - workload: cifar10
 - model: simple_cnn
@@ -41,5 +41,5 @@ defaults:
 training:
   batch_size: 32
   learning_rate: 0.001
-  epochs: 10
+  epochs: 15
   optimizer: adam

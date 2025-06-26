@@ -18,6 +18,7 @@ from avalanche.benchmarks.utils.utils import as_avalanche_dataset
 # Flower Imports
 import flwr
 import torch
+import gc  # For garbage collection
 from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context, ConfigRecord
 
@@ -57,6 +58,8 @@ elif cfg.dataset.workload == "split_cifar10":
     from workloads.SplitCIFAR10 import load_datasets
 elif cfg.dataset.workload == "split_cifar100":
     from workloads.SplitCIFAR100 import load_datasets
+elif cfg.dataset.workload == "core50":
+    from workloads.CORe50 import load_datasets
 else:
     raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 
@@ -74,6 +77,13 @@ NUM_CLIENTS = cfg.server.num_clients
 NUM_EXP = cfg.cl.num_experiences
 
 # Color print function
+def clear_memory():
+    """Clear CUDA memory and run garbage collection"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    gc.collect()
+
 def cprint(text, color="green"):
     """Print text with color. Available colors: red, green, yellow, blue, magenta, cyan, white"""
     colors = {
@@ -283,6 +293,11 @@ class FlowerClient(NumPyClient):
             local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
 
         print("Finished Fit")
+        
+        # MEMORY CLEANUP - clear CUDA cache and run garbage collection
+        clear_memory()
+        print(f"Memory cleared after fit round {rnd}")
+        
         # Client Failure Provision
         if random.random() < cfg.client.falloff:
             return None
@@ -352,6 +367,10 @@ class FlowerClient(NumPyClient):
 
         cprint("Logging Client States")
         # Note: global evaluation metrics logging disabled for now
+
+        # MEMORY CLEANUP - clear CUDA cache and run garbage collection  
+        clear_memory()
+        print(f"Memory cleared after evaluation round {rnd}")
 
         return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
 

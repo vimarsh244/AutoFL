@@ -1,4 +1,5 @@
 import torch
+import gc  # For garbage collection
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 from avalanche.evaluation.metrics import (
@@ -32,6 +33,11 @@ else:
 
 def make_cl_strat(net):
     """create continual learning strategy based on configuration"""
+    
+    # Clear any existing CUDA cache before creating strategy
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
     
     # setup logging
     text_logger = TextLogger(open('logs/avalog.txt', 'a'))
