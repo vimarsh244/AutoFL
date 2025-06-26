@@ -49,8 +49,14 @@ elif cfg.dataset.workload == "bdd100k_10k":
     from workloads.BDD100K10kDomainCL import load_datasets
 elif cfg.dataset.workload == "permuted_mnist":
     from workloads.PermutedMNIST import load_datasets
+elif cfg.dataset.workload == "rotated_mnist":
+    from workloads.RotatedMNIST import load_datasets
+elif cfg.dataset.workload == "mnist":
+    from workloads.MNIST import load_datasets
 elif cfg.dataset.workload == "split_cifar10":
     from workloads.SplitCIFAR10 import load_datasets
+elif cfg.dataset.workload == "split_cifar100":
+    from workloads.SplitCIFAR100 import load_datasets
 else:
     raise ValueError(f"Unknown workload: {cfg.dataset.workload}")
 

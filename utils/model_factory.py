@@ -30,11 +30,25 @@ def get_workload_info(workload_name, cl_strategy, num_experiences):
             'input_channels': 1,  # grayscale images
             'input_size': 28  # MNIST is 28x28
         },
+        'mnist': {
+            'total_classes': 10,
+            'classes_per_task': 10,  # basic MNIST classification
+            'task_type': 'domain',
+            'input_channels': 1,  # grayscale images
+            'input_size': 28  # MNIST is 28x28
+        },
         
         # class-incremental datasets - classes split across tasks
         'split_cifar10': {
             'total_classes': 10,
             'classes_per_task': lambda exp: 10 // exp,  # split classes
+            'task_type': 'class_incremental',
+            'input_channels': 3,  # RGB images
+            'input_size': 32  # CIFAR is 32x32
+        },
+        'split_cifar100': {
+            'total_classes': 100,
+            'classes_per_task': lambda exp: 100 // exp,  # split classes
             'task_type': 'class_incremental',
             'input_channels': 3,  # RGB images
             'input_size': 32  # CIFAR is 32x32
@@ -45,6 +59,13 @@ def get_workload_info(workload_name, cl_strategy, num_experiences):
             'task_type': 'class_incremental',
             'input_channels': 3,  # RGB images
             'input_size': 32  # CIFAR is 32x32
+        },
+        'rotated_mnist': {
+            'total_classes': 10,
+            'classes_per_task': 10,  # same classes, different rotations
+            'task_type': 'domain',
+            'input_channels': 1,  # grayscale images
+            'input_size': 28  # MNIST is 28x28
         },
         
         # real-world datasets

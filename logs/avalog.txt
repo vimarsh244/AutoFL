@@ -79705,3 +79705,178 @@ Epoch 4 ended.
 	Loss_Stream/eval_phase/test_stream = 1.2710
 	StreamForgetting/eval_phase/test_stream = 0.0000
 	Top1_Acc_Stream/eval_phase/test_stream = 0.6215
+-- >> Start of eval phase << --
+-- Starting eval on experience 0 from test_datasets stream --
+> Eval on experience 0 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp000 = 226.6934
+	Loss_Exp/eval_phase/test_datasets_stream/Exp000 = 0.1587
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp000 = 0.9557
+-- Starting eval on experience 1 from test_datasets stream --
+> Eval on experience 1 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp001 = 215.1815
+	Loss_Exp/eval_phase/test_datasets_stream/Exp001 = 1.3614
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp001 = 0.5423
+-- Starting eval on experience 2 from test_datasets stream --
+> Eval on experience 2 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp002 = 195.6631
+	Loss_Exp/eval_phase/test_datasets_stream/Exp002 = 3.7679
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp002 = 0.1982
+-- Starting eval on experience 3 from test_datasets stream --
+> Eval on experience 3 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp003 = 211.9054
+	Loss_Exp/eval_phase/test_datasets_stream/Exp003 = 4.6378
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp003 = 0.1752
+-- Starting eval on experience 4 from test_datasets stream --
+> Eval on experience 4 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp004 = 207.0507
+	Loss_Exp/eval_phase/test_datasets_stream/Exp004 = 4.4013
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp004 = 0.2332
+-- Starting eval on experience 5 from test_datasets stream --
+> Eval on experience 5 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp005 = 217.8404
+	Loss_Exp/eval_phase/test_datasets_stream/Exp005 = 4.4338
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp005 = 0.3006
+-- >> End of eval phase << --
+	Loss_Stream/eval_phase/test_datasets_stream = 3.1268
+	StreamForgetting/eval_phase/test_datasets_stream = 0.0000
+	Top1_Acc_Stream/eval_phase/test_datasets_stream = 0.4009
+-- >> Start of eval phase << --
+-- Starting eval on experience 0 from test_datasets stream --
+> Eval on experience 0 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp000 = 226.8283
+	Loss_Exp/eval_phase/test_datasets_stream/Exp000 = 0.1587
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp000 = 0.9557
+-- Starting eval on experience 1 from test_datasets stream --
+> Eval on experience 1 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp001 = 214.2930
+	Loss_Exp/eval_phase/test_datasets_stream/Exp001 = 1.3614
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp001 = 0.5423
+-- Starting eval on experience 2 from test_datasets stream --
+> Eval on experience 2 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp002 = 199.9065
+	Loss_Exp/eval_phase/test_datasets_stream/Exp002 = 3.7679
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp002 = 0.1982
+-- Starting eval on experience 3 from test_datasets stream --
+> Eval on experience 3 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp003 = 211.2601
+	Loss_Exp/eval_phase/test_datasets_stream/Exp003 = 4.6378
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp003 = 0.1752
+-- Starting eval on experience 4 from test_datasets stream --
+> Eval on experience 4 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp004 = 209.2694
+	Loss_Exp/eval_phase/test_datasets_stream/Exp004 = 4.4013
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp004 = 0.2332
+-- Starting eval on experience 5 from test_datasets stream --
+> Eval on experience 5 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp005 = 218.9198
+	Loss_Exp/eval_phase/test_datasets_stream/Exp005 = 4.4338
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp005 = 0.3006
+-- >> End of eval phase << --
+	Loss_Stream/eval_phase/test_datasets_stream = 3.1268
+	StreamForgetting/eval_phase/test_datasets_stream = 0.0000
+	Top1_Acc_Stream/eval_phase/test_datasets_stream = 0.4009
+-- >> Start of eval phase << --
+-- Starting eval on experience 0 from test_datasets stream --
+> Eval on experience 0 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp000 = 227.3376
+	Loss_Exp/eval_phase/test_datasets_stream/Exp000 = 0.1587
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp000 = 0.9557
+-- Starting eval on experience 1 from test_datasets stream --
+> Eval on experience 1 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp001 = 213.4661
+	Loss_Exp/eval_phase/test_datasets_stream/Exp001 = 1.3614
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp001 = 0.5423
+-- Starting eval on experience 2 from test_datasets stream --
+> Eval on experience 2 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp002 = 198.4148
+	Loss_Exp/eval_phase/test_datasets_stream/Exp002 = 3.7679
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp002 = 0.1982
+-- Starting eval on experience 3 from test_datasets stream --
+> Eval on experience 3 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp003 = 209.9998
+	Loss_Exp/eval_phase/test_datasets_stream/Exp003 = 4.6378
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp003 = 0.1752
+-- Starting eval on experience 4 from test_datasets stream --
+> Eval on experience 4 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp004 = 206.3156
+	Loss_Exp/eval_phase/test_datasets_stream/Exp004 = 4.4013
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp004 = 0.2332
+-- Starting eval on experience 5 from test_datasets stream --
+> Eval on experience 5 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp005 = 219.2332
+	Loss_Exp/eval_phase/test_datasets_stream/Exp005 = 4.4338
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp005 = 0.3006
+-- >> End of eval phase << --
+	Loss_Stream/eval_phase/test_datasets_stream = 3.1268
+	StreamForgetting/eval_phase/test_datasets_stream = 0.0000
+	Top1_Acc_Stream/eval_phase/test_datasets_stream = 0.4009
+-- >> Start of eval phase << --
+-- Starting eval on experience 0 from test_datasets stream --
+> Eval on experience 0 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp000 = 222.5790
+	Loss_Exp/eval_phase/test_datasets_stream/Exp000 = 0.1587
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp000 = 0.9557
+-- Starting eval on experience 1 from test_datasets stream --
+> Eval on experience 1 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp001 = 210.9181
+	Loss_Exp/eval_phase/test_datasets_stream/Exp001 = 1.3614
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp001 = 0.5423
+-- Starting eval on experience 2 from test_datasets stream --
+> Eval on experience 2 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp002 = 195.2622
+	Loss_Exp/eval_phase/test_datasets_stream/Exp002 = 3.7679
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp002 = 0.1982
+-- Starting eval on experience 3 from test_datasets stream --
+> Eval on experience 3 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp003 = 209.4536
+	Loss_Exp/eval_phase/test_datasets_stream/Exp003 = 4.6378
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp003 = 0.1752
+-- Starting eval on experience 4 from test_datasets stream --
+> Eval on experience 4 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp004 = 202.9184
+	Loss_Exp/eval_phase/test_datasets_stream/Exp004 = 4.4013
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp004 = 0.2332
+-- Starting eval on experience 5 from test_datasets stream --
+> Eval on experience 5 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp005 = 216.0993
+	Loss_Exp/eval_phase/test_datasets_stream/Exp005 = 4.4338
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp005 = 0.3006
+-- >> End of eval phase << --
+	Loss_Stream/eval_phase/test_datasets_stream = 3.1268
+	StreamForgetting/eval_phase/test_datasets_stream = 0.0000
+	Top1_Acc_Stream/eval_phase/test_datasets_stream = 0.4009
+-- >> Start of eval phase << --
+-- Starting eval on experience 0 from test_datasets stream --
+> Eval on experience 0 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp000 = 229.0114
+	Loss_Exp/eval_phase/test_datasets_stream/Exp000 = 0.1587
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp000 = 0.9557
+-- Starting eval on experience 1 from test_datasets stream --
+> Eval on experience 1 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp001 = 218.3726
+	Loss_Exp/eval_phase/test_datasets_stream/Exp001 = 1.3614
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp001 = 0.5423
+-- Starting eval on experience 2 from test_datasets stream --
+> Eval on experience 2 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp002 = 209.0928
+	Loss_Exp/eval_phase/test_datasets_stream/Exp002 = 3.7679
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp002 = 0.1982
+-- Starting eval on experience 3 from test_datasets stream --
+> Eval on experience 3 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp003 = 217.8397
+	Loss_Exp/eval_phase/test_datasets_stream/Exp003 = 4.6378
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp003 = 0.1752
+-- Starting eval on experience 4 from test_datasets stream --
+> Eval on experience 4 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp004 = 219.6634
+	Loss_Exp/eval_phase/test_datasets_stream/Exp004 = 4.4013
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp004 = 0.2332
+-- Starting eval on experience 5 from test_datasets stream --
+> Eval on experience 5 from test_datasets stream ended.
+	CPUUsage_Exp/eval_phase/test_datasets_stream/Exp005 = 226.7759
+	Loss_Exp/eval_phase/test_datasets_stream/Exp005 = 4.4338
+	Top1_Acc_Exp/eval_phase/test_datasets_stream/Exp005 = 0.3006
+-- >> End of eval phase << --
+	Loss_Stream/eval_phase/test_datasets_stream = 3.1268
+	StreamForgetting/eval_phase/test_datasets_stream = 0.0000
+	Top1_Acc_Stream/eval_phase/test_datasets_stream = 0.4009
