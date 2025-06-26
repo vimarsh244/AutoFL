@@ -1,12 +1,5 @@
-# enhanced continual learning features in autofl
 
-this document describes the enhanced continual learning capabilities added to the autofl system.
-
-## overview
-
-autofl now supports advanced continual learning strategies, new standard benchmarks, and additional model architectures for comprehensive federated continual learning experiments.
-
-## new continual learning strategies
+## continual learning strategies
 
 ### 1. elastic weight consolidation (ewc)
 protects important weights from being overwritten when learning new tasks.
@@ -39,7 +32,7 @@ cl:
   replay_mem_size: 300
 ```
 
-## new benchmark datasets
+## benchmark datasets
 
 ### permuted mnist
 classic cl benchmark where pixel permutations create different tasks.
@@ -78,7 +71,7 @@ cl:
 - different classes per task (true class-incremental)
 - tests ability to learn new categories
 
-## new model architectures
+## model architectures
 
 ### mobilenet
 efficient mobile-optimized cnn architectures.

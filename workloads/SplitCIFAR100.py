@@ -1,5 +1,6 @@
 # split cifar100 continual learning workload
 # classic class-incremental learning where 100 classes are split across tasks
+# model accuracy is not great, but it is a good start, need fixes and few improvements with model architecture
 
 import torch
 import torchvision.transforms as transforms
@@ -102,7 +103,7 @@ def load_datasets(partition_id: int):
         
         def __getitem__(self, idx):
             item = self.hf_dataset[idx]
-            return item["img"], item["label"]
+            return item["img"], item["fine_label"]
     
     train_tuple = TupleDataset(train_data)
     test_tuple = TupleDataset(test_split)

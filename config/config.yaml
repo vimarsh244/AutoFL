@@ -24,17 +24,17 @@ dataset:
   workload: cifar10
   batch_size: 32
   split: iid
-  niid:
-    alpha: 1.0
-    seed: 42
+  # niid:
+  #   alpha: 1.0
+  #   seed: 42
 wb:
   project: autofl-testing
-  name: cifar10_naive_simple_cnn
+  # name: cifar10_naive_simple_cnn
 
-defaults:
-  - workload: cifar10  # Choose workload: cifar10, cifar100, bdd100k, kitti
-  - model: simple_cnn      # Choose model architecture
-  - _self_
+# defaults:
+#   - workload: cifar10  # Choose workload: cifar10, cifar100, bdd100k, kitti
+#   - model: simple_cnn      # Choose model architecture
+#   - _self_
 
 # server:
 #   num_rounds: 10

@@ -1,6 +1,7 @@
 # core50 continual learning workload
 # 50 domestic objects in 10 categories designed specifically for continual learning
 # uses avalanche's built-in core50 dataset and benchmarks
+# code based off of avalanche's benchmark documentation
 
 import torch
 import torchvision.transforms as transforms
@@ -45,13 +46,13 @@ def load_datasets(partition_id: int):
     
     if scenario == 'ni':
         # New Instances: 8 experiences, same 50 classes in each
-        benchmark = CORe50(scenario='ni', run_id=0, train_transform=train_transform, eval_transform=test_transform)
+        benchmark = CORe50(scenario='ni', run=0, train_transform=train_transform, eval_transform=test_transform)
     elif scenario == 'nc':
         # New Classes: 9 experiences, first has 10 classes, others have 5 classes each
-        benchmark = CORe50(scenario='nc', run_id=0, train_transform=train_transform, eval_transform=test_transform)
+        benchmark = CORe50(scenario='nc', run=0, train_transform=train_transform, eval_transform=test_transform)
     elif scenario == 'nic':
         # New Instances and Classes: 79 experiences
-        benchmark = CORe50(scenario='nic', run_id=0, train_transform=train_transform, eval_transform=test_transform)
+        benchmark = CORe50(scenario='nic', run=0, train_transform=train_transform, eval_transform=test_transform)
     else:
         raise ValueError(f"Unknown CORe50 scenario: {scenario}")
     

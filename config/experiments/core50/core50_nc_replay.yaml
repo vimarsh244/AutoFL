@@ -31,9 +31,9 @@ server:
 
 client:
   num_cpus: 4
-  num_gpus: 0.0
+  num_gpus: 0.5
   epochs: 10
 
 wb:
   project: autofl-testing
-  name: f_core50_nc_replay_wide_resnet_fedavg_cpu 
+  name: f_core50_nc_replay_wide_resnet_fedavg_gpu
