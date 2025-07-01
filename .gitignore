@@ -188,3 +188,4 @@ outputs/*
 autofl_env/*
 logs/*
 data/*
+temp_config.yaml

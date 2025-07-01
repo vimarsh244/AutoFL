@@ -69,48 +69,64 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     pid = [m["pid"] for _, m in metrics]
     rnd = metrics[0][1]["server_round"]
 
-    exp_accuracy_ds = [json.loads(m["ExpAccuracy"]) for _, m in metrics]
-    client_accuracy = [m["accuracy"] for _, m in metrics]
-    client_loss = [m["loss"] for _, m in metrics]
+    exp_accuracy_ds = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
+    client_accuracy = [m["stream_accuracy"] for _, m in metrics]  # use stream_accuracy
+    client_loss = [m["stream_loss"] for _, m in metrics]  # use stream_loss
     examples = [num_examples for num_examples, _ in metrics]
     
-    wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
-    wexpacc_byround.append(wexpacc)
-    latest_wexpacc = wexpacc_byround[-1]
+    try:
+        wexpacc = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*exp_accuracy_ds)]
+        wexpacc_byround.append(wexpacc)
+        latest_wexpacc = wexpacc_byround[-1]
 
-    for i, w in enumerate(wexpacc_byround):
-        gcf_per_exp_running[i] = wexpacc_byround[i][i] - latest_wexpacc[i]
+        # Safe array indexing to prevent index errors
+        for i, w in enumerate(wexpacc_byround):
+            if i < len(wexpacc_byround[i]) and i < len(latest_wexpacc):
+                gcf_per_exp_running[i] = wexpacc_byround[i][i] - latest_wexpacc[i]
 
-    gcf = sum(gcf_per_exp_running)/NUM_ROUNDS
+        gcf = sum(gcf_per_exp_running)/NUM_ROUNDS if NUM_ROUNDS > 0 else 0
+    except Exception as e:
+        print(f"Error in forgetting calculation: {e}")
+        gcf = 0
+        wexpacc = [0] * len(exp_accuracy_ds[0]) if exp_accuracy_ds else [0]
 
     # Log all metrics in a single wandb.log call for better organization
-    wandb_metrics = {
-        # Global metrics
-        "global/accuracy": sum(accuracies) / sum(examples),
-        "global/loss": sum(losses) / sum(examples),
-        "global/forgetting_measure": gcf,
-        "round": rnd,
-    }
+    try:
+        wandb_metrics = {
+            # Global metrics
+            "global/accuracy": sum(w_accuracies) / sum(examples) if sum(examples) > 0 else 0,
+            "global/loss": sum(w_losses) / sum(examples) if sum(examples) > 0 else 0,
+            "global/forgetting_measure": gcf,
+            "round": rnd,
+        }
 
-    # Per-experience metrics
-    for i, expacc in enumerate(wexpacc, start=1):
-        wandb_metrics[f"global/experience_{i}/accuracy"] = expacc
+        # Per-experience metrics
+        for i, expacc in enumerate(wexpacc, start=1):
+            if isinstance(expacc, (int, float)) and not np.isnan(expacc):
+                wandb_metrics[f"global/experience_{i}/accuracy"] = float(expacc)
 
-    # Per-client metrics
-    for i, (acc, cid) in enumerate(zip(client_accuracy, pid), start=1):
-        wandb_metrics[f"client/{cid}/accuracy"] = acc
-        wandb_metrics[f"client/{cid}/loss"] = client_loss[i-1]
+        # Per-client metrics
+        for i, (acc, cid) in enumerate(zip(client_accuracy, pid), start=1):
+            if isinstance(acc, (int, float)) and not np.isnan(acc):
+                wandb_metrics[f"client/{cid}/accuracy"] = float(acc)
+            if i-1 < len(client_loss) and isinstance(client_loss[i-1], (int, float)) and not np.isnan(client_loss[i-1]):
+                wandb_metrics[f"client/{cid}/loss"] = float(client_loss[i-1])
 
-    # Per-experience forgetting metrics
-    for i, g in enumerate(gcf_per_exp_running):
-        wandb_metrics[f"global/experience_{i}/forgetting"] = g
+        # Per-experience forgetting metrics
+        for i, g in enumerate(gcf_per_exp_running):
+            if isinstance(g, (int, float)) and not np.isnan(g):
+                wandb_metrics[f"global/experience_{i}/forgetting"] = float(g)
 
-    # Log all metrics at once
-    wandb.log(wandb_metrics, step=rnd)
+        # Log all metrics at once
+        wandb.log(wandb_metrics, step=rnd)
+        print(f"Evaluation metrics logged successfully for round {rnd}")
+    except Exception as e:
+        print(f"Error logging evaluation metrics: {e}")
+        # Continue without logging rather than crashing
 
     return {
-        "global_accuracy": sum(accuracies) / sum(examples),
-        "global_loss": sum(losses) / sum(examples),
+        "global_accuracy": sum(w_accuracies) / sum(examples),
+        "global_loss": sum(w_losses) / sum(examples),
         "global_wexp_accuracy": ",".join(map(str, wexpacc)),
         "global_client_accuracy": ",".join(map(str, client_accuracy)),
         "global_client_loss": ",".join(map(str, client_loss)),
@@ -127,6 +143,10 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
     forgetting = [m.get("cumalative_forgetting_measure", 0) for _, m in metrics]
     stepwise_forgetting = [m["stepwise_forgetting_measure"] for _, m in metrics]
     exp_accs = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
+    
+    # Extract client IDs and round info for individual logging
+    client_ids = [m["pid"] for _, m in metrics]
+    rnd = metrics[0][1]["round"] if metrics else 1
     # Optionally, confusion matrices
     confusion_matrices = [json.loads(m["confusion_matrix"]) for _, m in metrics if "confusion_matrix" in m]
 
@@ -153,7 +173,7 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
     else:
         wandb_conf_matrix = None
 
-    # Log to wandb
+    # Log to wandb - fix the list logging issue
     log_dict = {
         "global/accuracy": avg_acc,
         "global/loss": avg_loss,
@@ -161,19 +181,26 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
         "global/stepwise_forgetting": avg_stepwise_forgetting,
         "global/BWT": bwt,
         "global/FWT": fwt,
-        "global/experience_accuracy": avg_exp_acc,
+        "round": rnd,
     }
-    print("Logging to wandb:", log_dict)  # Debug print
-    # Also log with simple keys for debugging
-    wandb.log({
-        "accuracy": avg_acc,
-        "loss": avg_loss,
-        "forgetting": avg_forgetting,
-        "stepwise_forgetting": avg_stepwise_forgetting,
-        "BWT": bwt,
-        "FWT": fwt,
-    })
-    wandb.log(log_dict)
+    
+    # Log per-experience accuracy as individual metrics instead of a list
+    for i, exp_acc in enumerate(avg_exp_acc):
+        log_dict[f"global/experience_{i+1}_accuracy"] = exp_acc
+    
+    # Add individual client metrics
+    for i, (client_id, _, m) in enumerate(zip(client_ids, range(len(metrics)), [m for _, m in metrics])):
+        log_dict[f"client/{client_id}/accuracy"] = m["stream_acc"]
+        log_dict[f"client/{client_id}/loss"] = m["stream_loss"]
+        log_dict[f"client/{client_id}/stepwise_forgetting"] = m["stepwise_forgetting_measure"]
+    
+    try:
+        print("Logging to wandb:", log_dict)  # Debug print
+        wandb.log(log_dict, step=rnd)
+        print(f"Fit metrics logged successfully for round {rnd}")
+    except Exception as e:
+        print(f"Error logging fit metrics: {e}")
+        # Continue without logging rather than crashing
 
     
     return {

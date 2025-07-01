@@ -21,8 +21,15 @@ python mclmain.py dataset.workload=cifar100 model.name=resnet cl.strategy=domain
 
 ## available workloads
 
+### classic datasets
 - **cifar10**: 10-class image classification
 - **cifar100**: 100-class image classification
+
+### continual learning benchmarks
+- **permuted_mnist**: pixel permutation tasks (standard cl benchmark)
+- **split_cifar10**: class-incremental cifar10 (2 classes per task)
+
+### other driving datasets   (requires way more work still for these in ML architecture side - need YOLO or some implementation for segmentation)
 - **bdd100k_10k**: 10k driving images subset (domain split by weather + time-of-day) - WORKING with real data (small subset)
 - **bdd100k**/**bdd100k_v2**: 100k driving images (domain split by weather + time-of-day) - just extrapolated but issue being dataset too big
 - **kitti**/**kitti_v2**: autonomous-driving street scenes (domain split by road-type + weather) - very large dataset, testing with subset
@@ -52,12 +59,19 @@ python datasets/prepare_datasets.py kitti --target ./data
 ## models
 
 - **simple_cnn**: lightweight (~62k params), good for cifar
-- **resnet**: powerful (~11m params), better for complex datasets
+- **resnet**: powerful (~11m params), better for complex datasets  
+- **mobilenet**: efficient mobile architecture
+  - **v2**: ~3.5m params, balanced performance/efficiency
+  - **v3_small**: ~2.5m params, most efficient
+  - **v3_large**: ~5.4m params, best performance
 
 ## continual learning strategies
 
 - **naive**: standard incremental learning
 - **domain**: domain-shift incremental learning with transformations
+- **ewc**: elastic weight consolidation (prevents forgetting important weights)
+- **replay**: experience replay (stores old samples in buffer)  
+- **hybrid**: combines ewc + replay for best performance
 
 ### domain definitions (cifar10/100)
 1. **original**: standard normalization
