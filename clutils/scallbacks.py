@@ -21,7 +21,7 @@ cfg = load_config()
 if cfg.wb.get('mode', 'online') != 'disabled':
     wandb.init(
         project=cfg.wb.project,
-        name=cfg.wb.name,
+        name=cfg.wb.get('name', None),
         config=OmegaConf.to_container(cfg, resolve=True),
         mode=cfg.wb.get('mode', 'online')
     )
@@ -215,4 +215,4 @@ def fit_metrics_aggregation_fn(metrics: list) -> dict:
 
 
 
-    
+

@@ -10,6 +10,7 @@ dataset:
   num_classes: 10
   split: niid  # non-iid distribution
   niid:
+    seed: 42
     alpha: 0.5  # moderate heterogeneity
 
 model:

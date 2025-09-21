@@ -1,24 +1,33 @@
 ---
 client:
   num_cpus: 8
-  num_gpus: 0.20
+  num_gpus: 0.2
   type: normal
-  epochs: 10
+  epochs: 3
   falloff: 0.0
 server:
-  num_clients: 5
-  fraction_fit: 1
-  fraction_eval: 1
-  min_fit: 5
-  min_eval: 5
-  num_rounds: 5
-  strategy: fedavg
+  num_clients: 10
+  fraction_fit: 0.6
+  fraction_eval: 0.6  
+  min_fit: 3
+  min_eval: 3
+  num_rounds: 10
+  strategy: scheduled_fedavg
+  # fraction_fit: 1
+  # fraction_eval: 1
+  # min_fit: 5
+  # min_eval: 5
+  # num_rounds: 5
+  # strategy: fedavg
 cl:
   num_experiences: 5
   strategy: naive # naive or domain | domain is for domain incremental learning, naive is for experience incrental learning (afaik)
   split: random
+  progression:
+    mode: per_k_rounds  # per_round | per_k_rounds
+    k: 1                # experiences advance every k rounds
 model:
-  name: simple_cnn
+  name: resnet
   num_classes: 10  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
 dataset:
   workload: cifar10
@@ -29,6 +38,7 @@ dataset:
   #   seed: 42
 wb:
   project: autofl-testing
+  name: cifar10_naive_omnet_sim_resnet_0
   # name: cifar10_naive_simple_cnn
 
 # defaults:
@@ -43,6 +53,22 @@ wb:
 #   fraction_eval: 0.2
 #   min_fit: 8
 #   min_eval: 2
+
+# Simulation-driven availability config
+sim:
+  enabled: true
+  csv_files:
+    - "Cars2BS_Sim_Data/Car2BS_Mean_SD.csv"
+    - "Cars2BS_Sim_Data/Car2BS_Multi_Mean_SD.csv"
+    - "Cars2BS_Sim_Data/BS2Car.csv"
+  signal: transmissionState   # transmissionState | rx | tx | sinr
+  threshold: null             # used for sinr if set
+  time_scale: 20.0            # multiply CSV seconds by this factor
+  round_duration_s: 1.0       # how many (scaled) seconds per FL round
+  start_time_s: 0.0
+  randomize_mapping: true     # random remap of car->client per round for domain randomization
+  seed: 42
+  min_gap_s: 0.0              # ignore availability shorter than this (after scaling)
 
 training:
   batch_size: 32
