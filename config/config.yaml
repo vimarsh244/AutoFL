@@ -17,6 +17,9 @@ cl:
   num_experiences: 5
   strategy: naive # naive or domain | domain is for domain incremental learning, naive is for experience incrental learning (afaik)
   split: random
+  progression:
+    mode: per_k_rounds  # per_round | per_k_rounds
+    k: 1                # experiences advance every k rounds
 model:
   name: simple_cnn
   num_classes: 10  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
@@ -29,6 +32,7 @@ dataset:
   #   seed: 42
 wb:
   project: autofl-testing
+  name: cifar10_naive_omnet_sim
   # name: cifar10_naive_simple_cnn
 
 # defaults:
@@ -43,6 +47,22 @@ wb:
 #   fraction_eval: 0.2
 #   min_fit: 8
 #   min_eval: 2
+
+# Simulation-driven availability config
+sim:
+  enabled: true
+  csv_files:
+    - "Cars2BS_Sim_Data/Car2BS_Mean_SD.csv"
+    - "Cars2BS_Sim_Data/Car2BS_Multi_Mean_SD.csv"
+    - "Cars2BS_Sim_Data/BS2Car.csv"
+  signal: transmissionState   # transmissionState | rx | tx | sinr
+  threshold: null             # used for sinr if set
+  time_scale: 20.0            # multiply CSV seconds by this factor
+  round_duration_s: 1.0       # how many (scaled) seconds per FL round
+  start_time_s: 0.0
+  randomize_mapping: true     # random remap of car->client per round for domain randomization
+  seed: 42
+  min_gap_s: 0.0              # ignore availability shorter than this (after scaling)
 
 training:
   batch_size: 32
