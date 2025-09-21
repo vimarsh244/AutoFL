@@ -84,20 +84,19 @@ NUM_EXP = cfg.cl.num_experiences
 
 # Prepare shared scheduler (optional) for client-side behavior
 _client_scheduler = None
-if getattr(cfg, 'sim', None) and getattr(cfg.sim, 'enabled', False) and load_scheduler_from_csvs is not None:
+if getattr(cfg, 'sim', None) and getattr(cfg.sim, 'enabled', False):
+    from sim.availability import create_enhanced_simulator
+    
     try:
-        _client_scheduler = load_scheduler_from_csvs(
-            csv_paths=[str(p) for p in getattr(cfg.sim, 'csv_files', [])],
-            signal=getattr(cfg.sim, 'signal', 'transmissionState'),
-            threshold=getattr(cfg.sim, 'threshold', None),
-            time_scale=getattr(cfg.sim, 'time_scale', 1.0),
-            round_duration_s=getattr(cfg.sim, 'round_duration_s', 1.0),
-            start_time_s=getattr(cfg.sim, 'start_time_s', 0.0),
-            randomize_mapping=getattr(cfg.sim, 'randomize_mapping', False),
-            num_clients=cfg.server.num_clients,
-            rnd_seed=getattr(cfg.sim, 'seed', 42),
-            min_gap_s=getattr(cfg.sim, 'min_gap_s', 0.0),
-        )
+        sim_config = {
+            'num_clients': cfg.server.num_clients,
+            'round_duration': getattr(cfg.sim, 'round_duration_s', 1.0),
+            'start_time': getattr(cfg.sim, 'start_time_s', 0.0),
+            'randomize_mapping': getattr(cfg.sim, 'randomize_mapping', False),
+            'rnd_seed': getattr(cfg.sim, 'seed', 42)
+        }
+        
+        _client_scheduler = create_enhanced_simulator(sim_config)
         print("[Client] Availability scheduler loaded")
     except Exception as e:
         print(f"[Client] Failed to load scheduler: {e}")

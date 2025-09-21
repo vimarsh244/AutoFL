@@ -1,18 +1,24 @@
 ---
 client:
   num_cpus: 8
-  num_gpus: 0.20
+  num_gpus: 0.2
   type: normal
-  epochs: 10
+  epochs: 3
   falloff: 0.0
 server:
-  num_clients: 5
-  fraction_fit: 1
-  fraction_eval: 1
-  min_fit: 5
-  min_eval: 5
-  num_rounds: 5
-  strategy: fedavg
+  num_clients: 10
+  fraction_fit: 0.6
+  fraction_eval: 0.6  
+  min_fit: 3
+  min_eval: 3
+  num_rounds: 10
+  strategy: scheduled_fedavg
+  # fraction_fit: 1
+  # fraction_eval: 1
+  # min_fit: 5
+  # min_eval: 5
+  # num_rounds: 5
+  # strategy: fedavg
 cl:
   num_experiences: 5
   strategy: naive # naive or domain | domain is for domain incremental learning, naive is for experience incrental learning (afaik)
@@ -21,7 +27,7 @@ cl:
     mode: per_k_rounds  # per_round | per_k_rounds
     k: 1                # experiences advance every k rounds
 model:
-  name: simple_cnn
+  name: resnet
   num_classes: 10  # Number of output classes (10 for CIFAR10, 100 for CIFAR100)
 dataset:
   workload: cifar10
@@ -32,7 +38,7 @@ dataset:
   #   seed: 42
 wb:
   project: autofl-testing
-  name: cifar10_naive_omnet_sim
+  name: cifar10_naive_omnet_sim_resnet_0
   # name: cifar10_naive_simple_cnn
 
 # defaults:

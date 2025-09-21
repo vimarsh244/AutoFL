@@ -26,57 +26,32 @@ except Exception:
     load_scheduler_from_csvs = None
 
 class ScheduledFedAvg(FedAvg):
-    def __init__(self, scheduler, sim_config, **kwargs):
-        super().__init__(**kwargs)
-        self.availability_scheduler = scheduler
-        self.sim_config = sim_config
-
-    def _filter_by_availability(self, items, round_idx: int):
-        if not items:
-            return items
-        available = set(self.availability_scheduler.get_available_clients(round_idx))
-        # Detect shape: list of ClientProxy vs list of (ClientProxy, Ins)
-        first = items[0]
-        if hasattr(first, 'cid'):
-            filtered = [c for c in items if int(c.cid) in available]
-        elif isinstance(first, tuple) and len(first) == 2 and hasattr(first[0], 'cid'):
-            filtered = [(c, ins) for (c, ins) in items if int(c.cid) in available]
+    def __init__(self, config: dict):
+        super().__init__(config)
+        self.config = config
+        self.current_round = 0
+        self.sim_config = config.get('sim', {})
+        
+        # Initialize simulation components
+        if self.sim_config.get('enabled', False):
+            print("[ScheduledFedAvg] Initializing simulation components...")
+            
+            # Import here to avoid circular imports
+            from sim.availability import create_enhanced_simulator
+            
+            try:
+                self.availability_scheduler = create_enhanced_simulator(self.sim_config)
+                if self.availability_scheduler:
+                    print(f"[ScheduledFedAvg] ✅ Availability scheduler initialized with {len(self.availability_scheduler.client_intervals_s)} clients")
+                else:
+                    print("[ScheduledFedAvg] ⚠️ Failed to create availability scheduler - using all clients")
+                    self.availability_scheduler = None
+            except Exception as e:
+                print(f"[ScheduledFedAvg] ❌ Error creating availability scheduler: {e}")
+                self.availability_scheduler = None
         else:
-            # Unknown shape, do not filter
-            return items
-        return filtered
-
-    def configure_fit(self, server_round: int, parameters, client_manager):
-        """Configure which clients to use for training in this round based on availability."""
-        # First get the base selection from the parent strategy
-        base_instructions = super().configure_fit(server_round, parameters, client_manager)
-        
-        if not self.availability_scheduler or not self.sim_config.get("enabled", False):
-            return base_instructions
-        
-        # Filter based on availability
-        if base_instructions:
-            filtered_instructions = self._filter_by_availability(base_instructions, server_round)
-            if filtered_instructions != base_instructions:
-                print(f"[Server] Round {server_round}: Filtered {len(base_instructions)} clients to {len(filtered_instructions)} available clients")
-            return filtered_instructions
-        return base_instructions
-
-    def configure_evaluate(self, server_round, parameters, client_manager):
-        """Configure which clients to use for evaluation in this round based on availability."""
-        # First get the base selection from the parent strategy
-        base_instructions = super().configure_evaluate(server_round, parameters, client_manager)
-        
-        if not self.availability_scheduler or not self.sim_config.get("enabled", False):
-            return base_instructions
-        
-        # Filter based on availability
-        if base_instructions:
-            filtered_instructions = self._filter_by_availability(base_instructions, server_round)
-            if filtered_instructions != base_instructions:
-                print(f"[Server] Round {server_round}: Filtered {len(base_instructions)} eval clients to {len(filtered_instructions)} available clients")
-            return filtered_instructions
-        return base_instructions
+            self.availability_scheduler = None
+            print("[ScheduledFedAvg] Simulation disabled - using all clients")
 
 
 def create_server_strategy():
