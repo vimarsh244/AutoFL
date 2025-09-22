@@ -214,25 +214,3 @@ python tests/test_server_strategy_selection.py
 4. **Add server logic** (if needed) in `mclserver.py`
 5. **Create experiment configs** in `config/sota/`
 6. **Add tests** in `/tests/`
-
-## Notes
-
-- **Memory Management**: Large models may require GPU acceleration (`client.num_gpus > 0`)
-- **Communication**: SOTA algorithms may have different communication patterns
-- **Convergence**: Different algorithms may require different hyperparameters for optimal performance
-- **Custom Server Logic**: Some algorithms (like FedWeIT) benefit from custom server aggregation
-
-## Troubleshooting
-
-### Common Issues:
-
-1. **Import Errors**: Ensure all dependencies are installed
-2. **CUDA Errors**: Set `client.num_gpus=0.0` for CPU-only execution
-3. **Memory Issues**: Reduce batch size or model complexity
-4. **Config Errors**: Check that all required fields are present
-
-### Getting Help:
-
-- Check existing test files for examples
-- Refer to algorithm papers for hyperparameter guidance
-- Use `python mclmain.py --help` for Hydra options 

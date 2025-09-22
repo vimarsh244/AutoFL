@@ -148,7 +148,11 @@ class FlowerClient(NumPyClient):
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp
         self.testlen_per_exp = testlen_per_exp
-        self.cl_strategy, self.evaluation = partition_strategies[partition_id]
+        # Build strategy on the same model instance used for evaluation to keep consistency
+        self.cl_strategy, self.evaluation = make_cl_strat(self.net)
+        # Set per-client id if supported (e.g., FedWeIT)
+        if hasattr(self.cl_strategy, 'current_client_id'):
+            self.cl_strategy.current_client_id = partition_id
         self.partition_id = partition_id
 
         # To add  later: Battery, Location, Speed, Mobility_Trace
@@ -168,14 +172,17 @@ class FlowerClient(NumPyClient):
         cprint("FIT")
         print(f"Client {self.partition_id} Fit on round: {rnd}")
 
-        # Train on Experience as per Round
+        # Train on Experience as per Round (cycle if rounds > number of experiences)
         cprint("Starting Training")
         results = []
+        total_exps = len(self.benchmark.train_stream)
+        exp_to_train = ((rnd - 1) % total_exps) + 1
         for i, experience in enumerate(self.benchmark.train_stream, start=1):
-            if i == rnd:
+            if i == exp_to_train:
                 print(f"EXP: {experience.current_experience}")
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
+                break
 
         # Loal Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
@@ -288,7 +295,8 @@ class FlowerClient(NumPyClient):
         if random.random() < cfg.client.falloff:
             return None
         else:
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
+            selected_idx = (rnd - 1) % len(self.trainlen_per_exp)
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[selected_idx], fit_dict_return
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):

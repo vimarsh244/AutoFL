@@ -53,8 +53,11 @@ def load_datasets(partition_id: int):
                 )
         elif cfg.dataset.split == "iid":
             partitioner = IidPartitioner(num_partitions=NUM_CLIENTS)
+        else:
+            partitioner = IidPartitioner(num_partitions=NUM_CLIENTS)
 
-        fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
+        # Use the configured partitioner for the train split
+        fds = FederatedDataset(dataset="cifar10", partitioners={"train": partitioner})
     partition = fds.load_partition(partition_id)
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
