@@ -119,21 +119,31 @@ for client_id, (strategy, evaluation) in enumerate(partition_strategies):
 class FlowerClient(NumPyClient):
     def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
         self.client_state = (context.state)
-        if "local_eval_metrics" not in self.client_state.config_records:
+        # Ensure top-level records exist using robust access (TypedDict may not support `in` reliably)
+        try:
+            local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
+        except KeyError:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
-        if "global_eval_metrics" not in self.client_state.config_records:
+            local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
+        try:
+            global_eval_metrics = self.client_state.config_records["global_eval_metrics"]
+        except KeyError:
             self.client_state.config_records["global_eval_metrics"] = ConfigRecord()
-        if "availability" not in self.client_state.config_records:
+            global_eval_metrics = self.client_state.config_records["global_eval_metrics"]
+        try:
+            _availability = self.client_state.config_records["availability"]
+        except KeyError:
             self.client_state.config_records["availability"] = ConfigRecord()
+            _availability = self.client_state.config_records["availability"]
         # Special Provision for acc per exp as needed to calculate fm
-        if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
-            self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
-        if "accuracy_per_exp" not in self.client_state.config_records["global_eval_metrics"]:
-            self.client_state.config_records["global_eval_metrics"]["accuracy_per_exp"] = []
-        if "rounds_selected" not in self.client_state.config_records["local_eval_metrics"]:
-            self.client_state.config_records["local_eval_metrics"]["rounds_selected"] = []
-        if "rounds_selected" not in self.client_state.config_records["global_eval_metrics"]:
-            self.client_state.config_records["global_eval_metrics"]["rounds_selected"] = []
+        if "accuracy_per_exp" not in local_eval_metrics:
+            local_eval_metrics["accuracy_per_exp"] = []
+        if "accuracy_per_exp" not in global_eval_metrics:
+            global_eval_metrics["accuracy_per_exp"] = []
+        if "rounds_selected" not in local_eval_metrics:
+            local_eval_metrics["rounds_selected"] = []
+        if "rounds_selected" not in global_eval_metrics:
+            global_eval_metrics["rounds_selected"] = []
         self.net = net
         self.benchmark = benchmark
         self.trainlen_per_exp = trainlen_per_exp

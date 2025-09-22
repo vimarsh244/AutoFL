@@ -29,6 +29,7 @@ dataset:
   #   seed: 42
 wb:
   project: autofl-testing
+  name: testing_cifar10_naive
   # name: cifar10_naive_simple_cnn
 
 # defaults:
