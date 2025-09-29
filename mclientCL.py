@@ -29,6 +29,12 @@ warnings.filterwarnings("ignore")
 from config_utils import load_config
 cfg = load_config()
 
+# Optional availability import for client-side guard
+try:
+    from sim.availability import load_scheduler_from_csvs
+except Exception:
+    load_scheduler_from_csvs = None
+
 
 # Import workload based on configuration
 if cfg.dataset.workload == "cifar10":
@@ -76,6 +82,26 @@ BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 NUM_EXP = cfg.cl.num_experiences
 
+# Prepare shared scheduler (optional) for client-side behavior
+_client_scheduler = None
+if getattr(cfg, 'sim', None) and getattr(cfg.sim, 'enabled', False):
+    from sim.availability import create_enhanced_simulator
+    
+    try:
+        sim_config = {
+            'num_clients': cfg.server.num_clients,
+            'round_duration': getattr(cfg.sim, 'round_duration_s', 1.0),
+            'start_time': getattr(cfg.sim, 'start_time_s', 0.0),
+            'randomize_mapping': getattr(cfg.sim, 'randomize_mapping', False),
+            'rnd_seed': getattr(cfg.sim, 'seed', 42)
+        }
+        
+        _client_scheduler = create_enhanced_simulator(sim_config)
+        print("[Client] Availability scheduler loaded")
+    except Exception as e:
+        print(f"[Client] Failed to load scheduler: {e}")
+        _client_scheduler = None
+
 # Color print function
 def clear_memory():
     """Clear CUDA memory and run garbage collection"""
@@ -108,12 +134,17 @@ def get_model():
 # Persistent State of Clients
 partition_strategies = [make_cl_strat(get_model().to(DEVICE)) for _ in range(NUM_CLIENTS)]
 
+# Set client_id for FedWeIT strategies
+for client_id, (strategy, evaluation) in enumerate(partition_strategies):
+    if hasattr(strategy, 'current_client_id'):
+        strategy.current_client_id = client_id
+        print(f"Set client_id {client_id} for FedWeIT strategy")
+
+
 # Client Class
 class FlowerClient(NumPyClient):
     def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
-        self.client_state = context.state
-        if not hasattr(self.client_state, 'config_records'):
-            self.client_state.config_records = ConfigRecord()
+        self.client_state = (context.state)
         if "local_eval_metrics" not in self.client_state.config_records:
             self.client_state.config_records["local_eval_metrics"] = ConfigRecord()
         if "global_eval_metrics" not in self.client_state.config_records:
@@ -140,6 +171,21 @@ class FlowerClient(NumPyClient):
 
         print(self.client_state.config_records)
 
+    def _is_available(self, rnd: int) -> bool:
+        if _client_scheduler is None:
+            return True
+        return _client_scheduler.is_available(self.partition_id, rnd)
+
+    def _log_availability(self, rnd: int, phase: str, state: str):
+        try:
+            av = self.client_state.config_records["availability"]
+            key = f"{phase}_round_{rnd}"
+            if key not in av:
+                av[key] = []
+            av[key].append({"client": self.partition_id, "state": state})
+        except Exception:
+            pass
+
     # Get Params from Global Model
     def get_parameters(self, config):
         return get_parameters(self.cl_strategy.model)
@@ -150,44 +196,49 @@ class FlowerClient(NumPyClient):
         rnd = config["server_round"]
         num_rounds = config["num_rounds"]
 
+        # Availability check before training
+        if not self._is_available(rnd):
+            self._log_availability(rnd, "fit", "unavailable")
+            # Simulate dropout by returning None (Flower will handle failures)
+            return None
+        self._log_availability(rnd, "fit", "start")
+
         cprint("FIT")
         print(f"Client {self.partition_id} Fit on round: {rnd}")
 
-        # Train on Experience as per Round - Fixed: Train on current experience only
+        # Random mid-round drop simulation (client.falloff)
+        drop_mid = random.random() < cfg.client.falloff
+
+        # Determine which experience to train this round
+        prog = getattr(cfg.cl, 'progression', None)
+        mode = getattr(prog, 'mode', 'per_round') if prog is not None else 'per_round'
+        if mode == 'per_k_rounds':
+            k = int(getattr(prog, 'k', 1)) or 1
+            target_idx = int(((rnd - 1) // k) + 1)
+        else:  # per_round
+            target_idx = rnd
+
+        # Clamp to available experiences
+        max_idx = len(self.benchmark.train_stream)
+        if target_idx > max_idx:
+            target_idx = max_idx
+
+        # Train on selected Experience
         cprint("Starting Training")
         results = []
-        
-        # Handle different benchmark types
-        if hasattr(self.benchmark, 'train_stream'):
-            train_stream = self.benchmark.train_stream
-        elif hasattr(self.benchmark, 'train_datasets_stream'):
-            train_stream = self.benchmark.train_datasets_stream
-        else:
-            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
-            
-        # Calculate which experience to train on (cycle through available experiences)
-        experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
-        print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
-        
-        for i, experience in enumerate(train_stream):
-            if i == experience_idx:
+        for i, experience in enumerate(self.benchmark.train_stream, start=1):
+            if i == target_idx:
                 print(f"EXP: {experience.current_experience}")
+                if drop_mid and random.random() < 0.5:
+                    self._log_availability(rnd, "fit", "mid_drop")
+                    return None
                 trainres = self.cl_strategy.train(experience)
                 cprint('Training completed: ')
-                break  # Only train on current experience
+                break
 
         # Local Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-        
-        # Handle different benchmark types for evaluation
-        if hasattr(self.benchmark, 'test_stream'):
-            test_stream = self.benchmark.test_stream
-        elif hasattr(self.benchmark, 'test_datasets_stream'):
-            test_stream = self.benchmark.test_datasets_stream
-        else:
-            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
-            
-        results.append(self.cl_strategy.eval(test_stream))
+        results.append(self.cl_strategy.eval(self.benchmark.test_stream))
 
         # Calc Accuracy per Experience 
         curr_accpexp = []
@@ -195,21 +246,14 @@ class FlowerClient(NumPyClient):
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
                     curr_accpexp.append(float(acc))
+                 
 
         # Get Local Eval Metrics from Avalanche
         last_metrics = self.evaluation.get_last_metrics()
-        print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
-        
-        # Handle different stream naming conventions
-        stream_suffix = "/eval_phase/test_stream"
-        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
-            stream_suffix = "/eval_phase/test_datasets_stream"
-        
-        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
-        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
-        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
-        # DiskUsage disabled to avoid permission errors
-        stream_disc_usage = last_metrics.get(f"DiskUsage_Stream{stream_suffix}", 0.0)
+        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()
+        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
+        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+        stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
 
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -220,17 +264,13 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i] - curr_accpexp[i]
+            fm = e[i] - curr_accpexp[i];
             cm_fmpexp.append(fm)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else:
+            cmfm = 0
 
-        # Checking Cumalative Forgetting Measure
-        cprint("Check Cumalative FM", "blue")
-        cprint("History of Accuracy per Experience for this client")
-        print(json.dumps(hist_accpexp, indent=2))
-        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
-        # print(f"Cumalative Forgetting Measure: {cmfm}")
- 
         # Calculate Running Stepwise Forgetting Measure
         sw_fmpexp = []
         if hist_accpexp:
@@ -239,19 +279,12 @@ class FlowerClient(NumPyClient):
             prev_accpexp = []
         for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
             sw_fmpexp.append(prev_acc - curr_acc)
-        swfm = sum(sw_fmpexp)/NUM_EXP if sw_fmpexp else 0.0
-
-        # Checking Stepwise Forgetting Measure
-        cprint("Check StepWise FM", "blue")
-        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-        print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
-        print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
-        print(f"StepWise Forgetting Measure: {swfm}")
+        swfm = sum(sw_fmpexp)/NUM_EXP
             
         # Make Fit Metrics Dictionary
         fit_dict_return = {
-                # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
-                # "cumalative_forgetting_measure":  float(cmfm),
+                # "confusion_matrix": json.dumps(confusion_matrix),
+                "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
                 "stream_acc":  float(stream_acc),
@@ -262,49 +295,38 @@ class FlowerClient(NumPyClient):
                 "pid": self.partition_id,
                 "round": rnd,
             }
-        cprint("----------------------------Results After Fit--------------------------------")
-        print(json.dumps(fit_dict_return, indent=4))
-        cprint('-----------------------------------------------------------------------')
 
-        
         # Logging Client State
-        print("Logging Client States")
         if rnd != 0:
-            # Update the existing ConfigRecord instead of replacing it with a dict
-            current_acc_exp = [json.dumps(curr_accpexp)]
-            current_stream_acc = [stream_acc]
-            current_stream_loss = [stream_loss]
-            current_swfm = [swfm]
-            
-            # Update existing metrics if they exist
-            if "accuracy_per_exp" in local_eval_metrics:
-                current_acc_exp.extend(local_eval_metrics["accuracy_per_exp"])
-            if "stream_accuracy" in local_eval_metrics:
-                current_stream_acc.extend(local_eval_metrics["stream_accuracy"])
-            if "stream_loss" in local_eval_metrics:
-                current_stream_loss.extend(local_eval_metrics["stream_loss"])
-            if "stepwise_forgetting_measure" in local_eval_metrics:
-                current_swfm.extend(local_eval_metrics["stepwise_forgetting_measure"])
-            
-            # Update the ConfigRecord directly
-            local_eval_metrics["accuracy_per_exp"] = current_acc_exp
-            local_eval_metrics["stream_accuracy"] = current_stream_acc
-            local_eval_metrics["stream_loss"] = current_stream_loss
-            local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
+            if "accuracy_per_exp" not in local_eval_metrics:
+                local_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            else:
+                local_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
+            if "stream_accuracy" not in local_eval_metrics:
+                local_eval_metrics["stream_accuracy"] = [stream_acc]
+            else:
+                local_eval_metrics["stream_accuracy"].append(stream_acc)
+            if "stream_loss" not in local_eval_metrics:
+                local_eval_metrics["stream_loss"] = [stream_loss]
+            else:
+                local_eval_metrics["stream_loss"].append(stream_loss)
+            if "cumalative_forgetting_measure" not in local_eval_metrics:
+                local_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
+            else:
+                local_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
+            if "stepwise_forgetting_measure" not in local_eval_metrics:
+                local_eval_metrics["stepwise_forgetting_measure"] = [swfm]
+            else:
+                local_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            local_eval_metrics["rounds_selected"].append(rnd)
 
-        print("Finished Fit")
-        
-        # MEMORY CLEANUP - clear CUDA cache and run garbage collection
-        clear_memory()
-        print(f"Memory cleared after fit round {rnd}")
-        
-        # Client Failure Provision
+        # Finish
         if random.random() < cfg.client.falloff:
+            self._log_availability(rnd, "fit", "end_drop")
             return None
         else:
-            # Use the same cycling logic for experience length
-            experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
+            self._log_availability(rnd, "fit", "end")
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[rnd-1], fit_dict_return
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
@@ -313,44 +335,20 @@ class FlowerClient(NumPyClient):
         rnd = config["server_round"]
         num_rounds = config["num_rounds"]
 
+        if not self._is_available(rnd):
+            self._log_availability(rnd, "eval", "unavailable")
+            return None
+
         # Creating a new CL Strategy for Evaluation
         cl_strategy, evaluation = make_cl_strat(self.net)
 
         # Distributed Client Evaluation
         results = []
         print(f"------------------------Local Client {self.partition_id} Evaluation on Updated Global Model--------------------")
-        
-        # Handle different benchmark types
-        if hasattr(self.benchmark, 'test_stream'):
-            test_stream = self.benchmark.test_stream
-        else:
-            test_stream = self.benchmark.test_datasets_stream
-        
-        results.append(cl_strategy.eval(test_stream))
+        results.append(cl_strategy.eval(self.benchmark.test_stream))
         last_metrics = evaluation.get_last_metrics()
-        
-        def find_metric_key(prefix, metrics_dict):
-            """Find the first key that starts with the given prefix."""
-            for key in metrics_dict.keys():
-                if key.startswith(prefix):
-                    return key
-            return None
-        
-        # Try to find loss and accuracy keys with different possible suffixes
-        loss_key = find_metric_key("Loss_Stream/eval_phase/test_stream", last_metrics)
-        if loss_key is None:
-            loss_key = find_metric_key("Loss_Stream/eval_phase/test_datasets_stream", last_metrics)
-        
-        acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_stream", last_metrics)
-        if acc_key is None:
-            acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_datasets_stream", last_metrics)
-        
-        if loss_key is None or acc_key is None:
-            print("Available metric keys:", list(last_metrics.keys()))
-            raise KeyError(f"Could not find required metrics. Loss key: {loss_key}, Acc key: {acc_key}")
-            
-        stream_loss = last_metrics[loss_key]
-        stream_acc = last_metrics[acc_key]
+        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
+        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
 
         # Getting Accuracy per Experience for client
         curr_accpexp = []
@@ -358,36 +356,70 @@ class FlowerClient(NumPyClient):
             for exp, acc in res.items():
                 if exp.startswith("Top1_Acc_Exp/"):
                     curr_accpexp.append(float(acc))
+                    
+         # Calculating Forgetting Measures
+        global_eval_metrics = self.client_state.config_records["global_eval_metrics"]
+        hist_accpexp = global_eval_metrics["accuracy_per_exp"]
 
-        print("Eval of Client: ")
-        print("Loss: ", stream_loss)
-        print("Acc: ", stream_acc)
-        print("Per Exp Acc: ", curr_accpexp)
+        # Calculating Running Cumalative Forgetting Measure
+        cm_fmpexp = []
+        for i, e in enumerate(hist_accpexp):
+            e = json.loads(e)
+            fm = e[i] - curr_accpexp[i];
+            cm_fmpexp.append(fm)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else:
+            cmfm = 0
+
+        # Calculate Running Stepwise Forgetting Measure
+        sw_fmpexp = []
+        if hist_accpexp:
+            prev_accpexp = json.loads(hist_accpexp[-1])
+        else:
+            prev_accpexp = []
+        for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
+            sw_fmpexp.append(prev_acc - curr_acc)
+        swfm = sum(sw_fmpexp)/NUM_EXP
 
         eval_dict_return = {
                 "stream_accuracy": float(stream_acc),
                 "stream_loss": float(stream_loss),
                 "accuracy_per_experience": json.dumps(curr_accpexp),
-                "stepwise_forgetting_measure": 0.0,  # not calculated in eval
-                "cumalative_forgetting_measure": 0.0,  # not calculated in eval
-                "stepwise_forgetting_per_experience": json.dumps([]),  # not calculated in eval
-                "cumalative_forgetting_per_experience": json.dumps([]),  # not calculated in eval
+                "stepwise_forgetting_measure": float(swfm),
+                "cumalative_forgetting_measure":  float(cmfm),
+                "stepwise_forgetting_per_experience": json.dumps(sw_fmpexp),
+                "cumalative_forgetting_per_experience": json.dumps(cm_fmpexp),
                 "server_round": rnd,
                 "pid": self.partition_id,
                 }
 
-        # Printing Global Evaluation Results:
-        print(f"Global Distributed Evaluation of Client {self.partition_id}")
-        print(json.dumps(eval_dict_return, indent=4))
-
-        cprint("Logging Client States")
-        # Note: global evaluation metrics logging disabled for now
-
-        # MEMORY CLEANUP - clear CUDA cache and run garbage collection  
-        clear_memory()
-        print(f"Memory cleared after evaluation round {rnd}")
+        # Logging Client States
+        if rnd != 0:
+            if "accuracy_per_exp" not in global_eval_metrics:
+                global_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            else:
+                global_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
+            if "stream_accuracy" not in global_eval_metrics:
+                global_eval_metrics["stream_accuracy"] = [stream_acc]
+            else:
+                global_eval_metrics["stream_accuracy"].append(stream_acc)
+            if "stream_loss" not in global_eval_metrics:
+                global_eval_metrics["stream_loss"] = [stream_loss]
+            else:
+                global_eval_metrics["stream_loss"].append(stream_loss)
+            if "cumalative_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
+            else:
+                global_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
+            if "stepwise_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["stepwise_forgetting_measure"] = [swfm]
+            else:
+                global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            global_eval_metrics["rounds_selected"].append(rnd)
 
         return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
+
 
 # Function that launches a Client
 def client_fn(context: Context) -> Client:
@@ -422,10 +454,6 @@ def client_fn(context: Context) -> Client:
             # Standard benchmark
             trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_stream]
             testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_stream]
-        elif hasattr(benchmark, 'train_datasets_stream'):
-            # CLScenario object
-            trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_datasets_stream]
-            testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_datasets_stream]
         else:
             raise ValueError(f"Unknown benchmark type: {type(benchmark)}")
     else:
@@ -438,15 +466,11 @@ def client_fn(context: Context) -> Client:
             # Standard benchmark
             trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_stream]
             testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_stream]
-        elif hasattr(benchmark, 'train_datasets_stream'):
-            # CLScenario object
-            trainlen_per_exp = [len(exp.dataset) for exp in benchmark.train_datasets_stream]
-            testlen_per_exp = [len(exp.dataset) for exp in benchmark.test_datasets_stream]
         else:
             raise ValueError(f"Unknown benchmark type: {type(benchmark)}")
 
     # Print ClientID
-    print("------------------------------------------------ClientID: ", partition_id, "----------------------------------------------")
+    print("ClientID: ", partition_id)
 
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
