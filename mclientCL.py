@@ -178,15 +178,6 @@ class FlowerClient(NumPyClient):
 
         # Local Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-        
-        # Handle different benchmark types for evaluation
-        if hasattr(self.benchmark, 'test_stream'):
-            test_stream = self.benchmark.test_stream
-        elif hasattr(self.benchmark, 'test_datasets_stream'):
-            test_stream = self.benchmark.test_datasets_stream
-        else:
-            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
-            
         results.append(self.cl_strategy.eval(test_stream))
 
         # Calc Accuracy per Experience 
@@ -202,14 +193,11 @@ class FlowerClient(NumPyClient):
         
         # Handle different stream naming conventions
         stream_suffix = "/eval_phase/test_stream"
-        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
-            stream_suffix = "/eval_phase/test_datasets_stream"
-        
-        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
+
+        confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
         stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
         stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
-        # DiskUsage disabled to avoid permission errors
-        stream_disc_usage = last_metrics.get(f"DiskUsage_Stream{stream_suffix}", 0.0)
+        stream_disc_usage = last_metrics["DiskUsage_Stream{stream_suffix}"]
 
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -257,7 +245,7 @@ class FlowerClient(NumPyClient):
             
         # Make Fit Metrics Dictionary
         fit_dict_return = {
-                # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
+                "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
                 "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
@@ -277,29 +265,29 @@ class FlowerClient(NumPyClient):
         # Logging Client State
         print("Logging Client States")
         if rnd != 0:
-            # Update the existing ConfigRecord instead of replacing it with a dict
-            current_acc_exp = [json.dumps(curr_accpexp)]
-            current_stream_acc = [stream_acc]
-            current_stream_loss = [stream_loss]
-            current_swfm = [swfm]
+            if "accuracy_per_exp" not in local_eval_metrics:
+                local_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            else:
+                local_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
+            if "stream_accuracy" not in local_eval_metrics:
+                local_eval_metrics["stream_accuracy"] = [stream_acc]
+            else:
+                local_eval_metrics["stream_accuracy"].append(stream_acc)
+            if "stream_loss" not in local_eval_metrics:
+                local_eval_metrics["stream_loss"] = [stream_loss]
+            else:
+                local_eval_metrics["stream_loss"].append(stream_loss)
+            if "cumalative_forgetting_measure" not in local_eval_metrics:
+                local_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
+            else:
+                local_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
+            if "stepwise_forgetting_measure" not in local_eval_metrics:
+                local_eval_metrics["stepwise_forgetting_measure"] = [swfm]
+            else:
+                local_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            local_eval_metrics["rounds_selected"].append(rnd)
             
-            # Update existing metrics if they exist
-            if "accuracy_per_exp" in local_eval_metrics:
-                current_acc_exp.extend(local_eval_metrics["accuracy_per_exp"])
-            if "stream_accuracy" in local_eval_metrics:
-                current_stream_acc.extend(local_eval_metrics["stream_accuracy"])
-            if "stream_loss" in local_eval_metrics:
-                current_stream_loss.extend(local_eval_metrics["stream_loss"])
-            if "stepwise_forgetting_measure" in local_eval_metrics:
-                current_swfm.extend(local_eval_metrics["stepwise_forgetting_measure"])
-            
-            # Update the ConfigRecord directly
-            local_eval_metrics["accuracy_per_exp"] = current_acc_exp
-            local_eval_metrics["stream_accuracy"] = current_stream_acc
-            local_eval_metrics["stream_loss"] = current_stream_loss
-            local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
-
-        print("Finished Fit")
+        cprint("Finished Fit")
         
         # MEMORY CLEANUP - clear CUDA cache and run garbage collection
         clear_memory()
@@ -335,31 +323,10 @@ class FlowerClient(NumPyClient):
         
         results.append(cl_strategy.eval(test_stream))
         last_metrics = evaluation.get_last_metrics()
+        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
+        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
         
-        def find_metric_key(prefix, metrics_dict):
-            """Find the first key that starts with the given prefix."""
-            for key in metrics_dict.keys():
-                if key.startswith(prefix):
-                    return key
-            return None
-        
-        # Try to find loss and accuracy keys with different possible suffixes
-        loss_key = find_metric_key("Loss_Stream/eval_phase/test_stream", last_metrics)
-        if loss_key is None:
-            loss_key = find_metric_key("Loss_Stream/eval_phase/test_datasets_stream", last_metrics)
-        
-        acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_stream", last_metrics)
-        if acc_key is None:
-            acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_datasets_stream", last_metrics)
-        
-        if loss_key is None or acc_key is None:
-            print("Available metric keys:", list(last_metrics.keys()))
-            raise KeyError(f"Could not find required metrics. Loss key: {loss_key}, Acc key: {acc_key}")
-            
-        stream_loss = last_metrics[loss_key]
-        stream_acc = last_metrics[acc_key]
-
-        # Getting Accuracy per Experience for client
+               # Getting Accuracy per Experience for client
         curr_accpexp = []
         for res in results:
             for exp, acc in res.items():
@@ -451,10 +418,6 @@ class FlowerClient(NumPyClient):
             else:
                 global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
             global_eval_metrics["rounds_selected"].append(rnd)
-
-        # MEMORY CLEANUP - clear CUDA cache and run garbage collection  
-        clear_memory()
-        print(f"Memory cleared after evaluation round {rnd}")
 
         return float(stream_loss), sum(self.testlen_per_exp), eval_dict_return
 
