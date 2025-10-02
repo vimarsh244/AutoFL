@@ -178,7 +178,7 @@ class FlowerClient(NumPyClient):
 
         # Local Eval after fit on client for metrics
         print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-        results.append(self.cl_strategy.eval(test_stream))
+        results.append(self.cl_strategy.eval(self.benchmark.test_stream))
 
         # Calc Accuracy per Experience 
         curr_accpexp = []
@@ -194,10 +194,10 @@ class FlowerClient(NumPyClient):
         # Handle different stream naming conventions
         stream_suffix = "/eval_phase/test_stream"
 
-        confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
+        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
         stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
         stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
-        stream_disc_usage = last_metrics["DiskUsage_Stream{stream_suffix}"]
+        # stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
 
         # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -208,7 +208,7 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i] - curr_accpexp[i]
+            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
             cm_fmpexp.append(fm)
         if cm_fmpexp:
             cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
@@ -245,12 +245,12 @@ class FlowerClient(NumPyClient):
             
         # Make Fit Metrics Dictionary
         fit_dict_return = {
-                "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
+         #       "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
                 "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
                 "stream_acc":  float(stream_acc),
-                "stream_disc_usage":  float(stream_disc_usage),
+                "stream_disc_usage":  float(0.0),
                 "accuracy_per_experience": json.dumps(curr_accpexp),
                 "stepwise_forgetting_per_exp": json.dumps(sw_fmpexp),
                 "cumalative_forgetting_per_exp": json.dumps(cm_fmpexp),
@@ -326,7 +326,7 @@ class FlowerClient(NumPyClient):
         stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
         stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
         
-               # Getting Accuracy per Experience for client
+        # Getting Accuracy per Experience for client
         curr_accpexp = []
         for res in results:
             for exp, acc in res.items():
@@ -340,7 +340,7 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i] - curr_accpexp[i];
+            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP];
             cm_fmpexp.append(fm)
         if cm_fmpexp:
             cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
