@@ -160,13 +160,13 @@ class FlowerClient(NumPyClient):
         # Handle different benchmark types
         if hasattr(self.benchmark, 'train_stream'):
             train_stream = self.benchmark.train_stream
-        elif hasattr(self.benchmark, 'train_datasets_stream'):
+        elif hasattr(self.benchmark, 'train_datasets_stream'): # Might not need
             train_stream = self.benchmark.train_datasets_stream
         else:
             raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
             
         # Calculate which experience to train on (cycle through available experiences)
-        experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+        experience_idx = ((rnd - 1) % NUM_EXP)
         print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
         
         for i, experience in enumerate(train_stream):
@@ -222,6 +222,10 @@ class FlowerClient(NumPyClient):
             e = json.loads(e)
             fm = e[i] - curr_accpexp[i]
             cm_fmpexp.append(fm)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else: 
+            cmfm = 0
 
         # Checking Cumalative Forgetting Measure
         cprint("Check Cumalative FM", "blue")
@@ -229,7 +233,7 @@ class FlowerClient(NumPyClient):
         print(json.dumps(hist_accpexp, indent=2))
         print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
         print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
-        # print(f"Cumalative Forgetting Measure: {cmfm}")
+        print(f"Cumalative Forgetting Measure: {cmfm}")
  
         # Calculate Running Stepwise Forgetting Measure
         sw_fmpexp = []
@@ -239,7 +243,10 @@ class FlowerClient(NumPyClient):
             prev_accpexp = []
         for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
             sw_fmpexp.append(prev_acc - curr_acc)
-        swfm = sum(sw_fmpexp)/NUM_EXP if sw_fmpexp else 0.0
+        if sw_fmpexp:
+            swfm = sum(sw_fmpexp)/NUM_EXP 
+        else: 
+            swfm = 0.0
 
         # Checking Stepwise Forgetting Measure
         cprint("Check StepWise FM", "blue")
@@ -251,7 +258,7 @@ class FlowerClient(NumPyClient):
         # Make Fit Metrics Dictionary
         fit_dict_return = {
                 # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
-                # "cumalative_forgetting_measure":  float(cmfm),
+                "cumalative_forgetting_measure":  float(cmfm),
                 "stepwise_forgetting_measure": float(swfm),
                 "stream_loss":  float(stream_loss),
                 "stream_acc":  float(stream_acc),
@@ -303,7 +310,7 @@ class FlowerClient(NumPyClient):
             return None
         else:
             # Use the same cycling logic for experience length
-            experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+            experience_idx = ((rnd - 1) % NUM_EXP)
             return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
 
     # Evaluate After Updating Global Model
@@ -359,6 +366,46 @@ class FlowerClient(NumPyClient):
                 if exp.startswith("Top1_Acc_Exp/"):
                     curr_accpexp.append(float(acc))
 
+        # Calculating Forgetting Measures
+        global_eval_metrics = self.client_state.config_records["global_eval_metrics"]
+        hist_accpexp = global_eval_metrics["accuracy_per_exp"]
+
+        cm_fmpexp = []
+        for i, e in enumerate(hist_accpexp):
+            e = json.loads(e)
+            fm = e[i] - curr_accpexp[i];
+            cm_fmpexp.append(fm)
+        if cm_fmpexp:
+            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+        else:
+            cmfm = 0
+
+        # Checking Cumalative Forgetting Measure
+        cprint("Check Cumalative FM", "blue")
+        cprint("History of Accuracy per Experience for this client")
+        print(json.dumps(hist_accpexp, indent=2))
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+        print(f"Cumalative Forgetting Measure: {cmfm}")
+ 
+        # Calculate Running Stepwise Forgetting Measure
+        sw_fmpexp = []
+        if hist_accpexp:
+            prev_accpexp = json.loads(hist_accpexp[-1])
+        else:
+            prev_accpexp = []
+        for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
+            sw_fmpexp.append(prev_acc - curr_acc)
+        swfm = sum(sw_fmpexp)/NUM_EXP
+
+        # Checking Stepwise Forgetting Measure
+        cprint("Check StepWise FM", "blue")
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
+        print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
+        print(f"StepWise Forgetting Measure: {swfm}")
+
+
         print("Eval of Client: ")
         print("Loss: ", stream_loss)
         print("Acc: ", stream_acc)
@@ -368,10 +415,10 @@ class FlowerClient(NumPyClient):
                 "stream_accuracy": float(stream_acc),
                 "stream_loss": float(stream_loss),
                 "accuracy_per_experience": json.dumps(curr_accpexp),
-                "stepwise_forgetting_measure": 0.0,  # not calculated in eval
-                "cumalative_forgetting_measure": 0.0,  # not calculated in eval
-                "stepwise_forgetting_per_experience": json.dumps([]),  # not calculated in eval
-                "cumalative_forgetting_per_experience": json.dumps([]),  # not calculated in eval
+                "stepwise_forgetting_measure": float(swfm),  # not calculated in eval
+                "cumalative_forgetting_measure": float(cmfm),  # not calculated in eval
+                "stepwise_forgetting_per_experience": json.dumps(sw_fmpexp),  # not calculated in eval
+                "cumalative_forgetting_per_experience": json.dumps(cm_fmpexp),  # not calculated in eval
                 "server_round": rnd,
                 "pid": self.partition_id,
                 }
@@ -382,6 +429,28 @@ class FlowerClient(NumPyClient):
 
         cprint("Logging Client States")
         # Note: global evaluation metrics logging disabled for now
+        if rnd != 0:
+            if "accuracy_per_exp" not in global_eval_metrics:
+                global_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
+            else:
+                global_eval_metrics["accuracy_per_exp"].append(json.dumps(curr_accpexp))
+            if "stream_accuracy" not in global_eval_metrics:
+                global_eval_metrics["stream_accuracy"] = [stream_acc]
+            else:
+                global_eval_metrics["stream_accuracy"].append(stream_acc)
+            if "stream_loss" not in global_eval_metrics:
+                global_eval_metrics["stream_loss"] = [stream_loss]
+            else:
+                global_eval_metrics["stream_loss"].append(stream_loss)
+            if "cumalative_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["cumalative_forgetting_measure"] = [cmfm] 
+            else:
+                global_eval_metrics["cumalative_forgetting_measure"].append(cmfm)
+            if "stepwise_forgetting_measure" not in global_eval_metrics:
+                global_eval_metrics["stepwise_forgetting_measure"] = [swfm]
+            else:
+                global_eval_metrics["stepwise_forgetting_measure"].append(swfm)
+            global_eval_metrics["rounds_selected"].append(rnd)
 
         # MEMORY CLEANUP - clear CUDA cache and run garbage collection  
         clear_memory()
