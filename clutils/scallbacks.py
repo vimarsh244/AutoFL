@@ -84,7 +84,9 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
         "global/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
         "global/average/stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
         "global/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
+        "global/experience/accuracy": {id: acc for id, acc in zip(pid, weighted_accuracy_pexp)},
     }
+
 
     wandb.log(eval_metrics, step=rnd)
 
@@ -126,7 +128,8 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "local/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
         "local/average/stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
         "local/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
-           }
+        "local/experience/accuracy": {id: acc for id, acc in zip(pid, weighted_accuracy_per_exp)},
+        }
 
     # Logging to Wandb
     wandb.log(fit_metrics, step=rnd)
