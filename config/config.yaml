@@ -29,7 +29,28 @@ dataset:
   #   seed: 42
 wb:
   project: autofl-testing
+  mode: online
   # name: cifar10_naive_simple_cnn
+
+latency:
+  enabled: false
+  csv_path: omnet-data/latency_with_10cars2RSU_30.09.2025.csv
+  sampling_mode: mean  # options: mean, trace
+  scaling_factor: 1.0
+  threshold_multiplier: 1.0
+  drop_behavior: skip  # options: skip, remove
+  sleep: true
+  random_seed: 42
+  max_clients: 10
+  throughput_floor_kbps: 10.0
+  upload_multiplier: 1.0
+  download_multiplier: 1.0
+
+logging:
+  output_root: outputs
+  save_client_metrics: true
+  save_server_metrics: true
+  append_run_name_to_dir: true
 
 # defaults:
 #   - workload: cifar10  # Choose workload: cifar10, cifar100, bdd100k, kitti

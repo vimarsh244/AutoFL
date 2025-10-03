@@ -16,6 +16,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from config_utils import load_config
 cfg = load_config()
+from utils.latency_simulator import get_runtime_recorder
 
 # Only initialize wandb if mode is not disabled
 if cfg.wb.get('mode', 'online') != 'disabled':
@@ -90,6 +91,18 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
 
     wandb.log(eval_metrics, step=rnd)
 
+    recorder = get_runtime_recorder()
+    if recorder is not None:
+        entries = [(num_examples, dict(m)) for num_examples, m in metrics]
+        recorder.log_client_round(rnd, entries)
+        aggregate_row = {
+            "global/average/accuracy": eval_metrics["global/average/accuracy"],
+            "global/average/loss": eval_metrics["global/average/loss"],
+            "global/average_cumalative_forgetting": eval_metrics["global/average_cumalative_forgetting"],
+            "global/average_stepwise_forgetting": eval_metrics["global/average_stepwise_forgetting"],
+        }
+        recorder.log_aggregate_metrics(rnd, "eval", aggregate_row)
+
     return {
             "global/average_accuracy": sum(w_accuracies) / sum(examples),
             "global/average_loss": sum(w_losses) / sum(examples),
@@ -109,6 +122,11 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Forgetting Measures
     cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrics]
     stepwise_forgetting_measures = [m["stepwise_forgetting_measure"] for _, m in metrics]
+    network_times = [m.get("latency/expected_network_time_s", 0.0) for _, m in metrics]
+    training_times = [m.get("timing/training_s", 0.0) for _, m in metrics]
+    round_times = [m.get("timing/round_total_s", 0.0) for _, m in metrics]
+    download_times = [m.get("latency/download_time_s", 0.0) for _, m in metrics]
+    upload_times = [m.get("latency/upload_time_s", 0.0) for _, m in metrics]
 
     # Round and Partition Id's
     rnd = metrics[0][1]["round"]
@@ -129,14 +147,38 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "local/average/stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
         "local/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
         "local/experience/accuracy": {id: acc for id, acc in zip(pid, weighted_accuracy_per_exp)},
+        "local/average/network_time_s": float(sum(network_times) / len(network_times)) if network_times else 0.0,
+        "local/average/training_time_s": float(sum(training_times) / len(training_times)) if training_times else 0.0,
+        "local/average/round_time_s": float(sum(round_times) / len(round_times)) if round_times else 0.0,
+        "local/average/download_time_s": float(sum(download_times) / len(download_times)) if download_times else 0.0,
+        "local/average/upload_time_s": float(sum(upload_times) / len(upload_times)) if upload_times else 0.0,
         }
 
     # Logging to Wandb
     wandb.log(fit_metrics, step=rnd)
 
+    recorder = get_runtime_recorder()
+    if recorder is not None:
+        entries = [(num_examples, dict(m)) for num_examples, m in metrics]
+        recorder.log_client_round(rnd, entries)
+        aggregate_row = {
+            "local/average/accuracy": fit_metrics["local/average/accuracy"],
+            "local/average/loss": fit_metrics["local/average/loss"],
+            "local/average/cumalative_forgetting": fit_metrics["local/average/cumalative_forgetting"],
+            "local/average/stepwise_forgetting": fit_metrics["local/average/stepwise_forgetting"],
+            "local/average/network_time_s": fit_metrics.get("local/average/network_time_s", 0.0),
+            "local/average/training_time_s": fit_metrics.get("local/average/training_time_s", 0.0),
+            "local/average/round_time_s": fit_metrics.get("local/average/round_time_s", 0.0),
+            "local/average/download_time_s": fit_metrics.get("local/average/download_time_s", 0.0),
+            "local/average/upload_time_s": fit_metrics.get("local/average/upload_time_s", 0.0),
+        }
+        recorder.log_aggregate_metrics(rnd, "fit", aggregate_row)
+
     return {
             "local/average_accuracy": sum(w_accuracies) / sum(examples),
             "local/average_loss": sum(w_losses) / sum(examples),
             "local/average_cumalative_forgetting": sum(cumalative_forgetting_measures)/ len(cumalative_forgetting_measures),
-            "local/average_stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
+        "local/average_stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
+        "local/average_network_time": float(sum(network_times) / len(network_times)) if network_times else 0.0,
+        "local/average_round_time": float(sum(round_times) / len(round_times)) if round_times else 0.0,
             }   

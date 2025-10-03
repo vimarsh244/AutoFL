@@ -8,6 +8,7 @@ import json
 import random
 import os
 import warnings
+import time
 from omegaconf import OmegaConf
 # Avalanche Imports
 from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset
@@ -27,7 +28,11 @@ warnings.filterwarnings("ignore")
 
 #Setting up Configuration
 from config_utils import load_config
+from utils.latency_simulator import LatencySimulator
+
 cfg = load_config()
+
+latency_simulator = LatencySimulator(cfg)
 
 
 # Import workload based on configuration
@@ -135,6 +140,10 @@ class FlowerClient(NumPyClient):
         self.testlen_per_exp = testlen_per_exp
         self.cl_strategy, self.evaluation = partition_strategies[partition_id]
         self.partition_id = partition_id
+        self.latency_sim = latency_simulator
+        self.latency_enabled = self.latency_sim.enabled and self.latency_sim.has_client(partition_id)
+        self.permanent_drop = False
+        self._payload_bytes = None
 
         # To add  later: Battery, Location, Speed, Mobility_Trace
 
@@ -144,17 +153,54 @@ class FlowerClient(NumPyClient):
     def get_parameters(self, config):
         return get_parameters(self.cl_strategy.model)
 
+    def _ensure_payload_bytes(self, parameters) -> int:
+        if self._payload_bytes is None:
+            try:
+                self._payload_bytes = int(sum(arr.nbytes for arr in parameters))
+            except AttributeError:
+                self._payload_bytes = 0
+        return self._payload_bytes or 0
+
     # Fit on Local Data
     def fit(self, parameters, config):
         set_parameters(self.cl_strategy.model, parameters)
         rnd = config["server_round"]
         num_rounds = config["num_rounds"]
 
+        round_start = time.time()
+
         cprint("FIT")
         print(f"Client {self.partition_id} Fit on round: {rnd}")
 
-        # Train on Experience as per Round - Fixed: Train on current experience only
-        cprint("Starting Training")
+        payload_bytes = self._ensure_payload_bytes(parameters)
+        latency_sample = None
+        base_delay_s = 0.0
+        download_time_s = 0.0
+        upload_time_s = 0.0
+        expected_network_time_s = 0.0
+        threshold_s = float("inf")
+        exceeded_threshold = False
+
+        if self.latency_enabled:
+            latency_sample = self.latency_sim.sample(self.partition_id, rnd, payload_bytes)
+            base_delay_s = latency_sample.base_delay_s
+            download_time_s = latency_sample.download_time_s
+            upload_time_s = latency_sample.upload_time_s
+            expected_network_time_s = latency_sample.total_network_time_s
+            threshold_s = latency_sample.threshold_s
+            exceeded_threshold = latency_sample.exceeded_threshold
+            if exceeded_threshold and not self.permanent_drop:
+                cprint(
+                    f"Client {self.partition_id} latency sample {expected_network_time_s:.3f}s exceeds threshold {threshold_s:.3f}s",
+                    "yellow",
+                )
+            self.latency_sim.sleep_pre_training(latency_sample)
+
+        drop_due_to_latency = self.permanent_drop or (self.latency_enabled and exceeded_threshold)
+        if drop_due_to_latency and not self.permanent_drop and self.latency_sim.should_remove_permanently():
+            cprint(f"Client {self.partition_id} marked for permanent removal due to latency", "red")
+            self.permanent_drop = True
+
         results = []
         
         # Handle different benchmark types
@@ -169,81 +215,102 @@ class FlowerClient(NumPyClient):
         experience_idx = ((rnd - 1) % NUM_EXP)
         print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
         
-        for i, experience in enumerate(train_stream):
-            if i == experience_idx:
-                print(f"EXP: {experience.current_experience}")
-                trainres = self.cl_strategy.train(experience)
-                cprint('Training completed: ')
-                break  # Only train on current experience
+        training_start = time.time()
+        training_duration = 0.0
+        if not drop_due_to_latency:
+            for i, experience in enumerate(train_stream):
+                if i == experience_idx:
+                    print(f"EXP: {experience.current_experience}")
+                    trainres = self.cl_strategy.train(experience)
+                    cprint('Training completed: ')
+                    break  # Only train on current experience
+            training_duration = time.time() - training_start
+        else:
+            cprint(f"Skipping training for client {self.partition_id} due to latency threshold", "yellow")
+            training_duration = 0.0
 
         # Local Eval after fit on client for metrics
-        print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-        results.append(self.cl_strategy.eval(self.benchmark.test_stream))
+        evaluation_duration = 0.0
+        if not drop_due_to_latency:
+            eval_start = time.time()
+            print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
+            results.append(self.cl_strategy.eval(self.benchmark.test_stream))
+            evaluation_duration = time.time() - eval_start
 
-        # Calc Accuracy per Experience 
-        curr_accpexp = []
-        for res in results:
-            for exp, acc in res.items():
-                if exp.startswith("Top1_Acc_Exp/"):
-                    curr_accpexp.append(float(acc))
-
-        # Get Local Eval Metrics from Avalanche
-        last_metrics = self.evaluation.get_last_metrics()
-        print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
-        
-        # Handle different stream naming conventions
-        stream_suffix = "/eval_phase/test_stream"
-
-        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
-        stream_loss = last_metrics[f"Loss_Stream{stream_suffix}"]
-        stream_acc = last_metrics[f"Top1_Acc_Stream{stream_suffix}"]
-        # stream_disc_usage = last_metrics["DiskUsage_Stream/eval_phase/test_stream"]
-
-        # Calculating Forgetting Measures
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
-        hist_accpexp = local_eval_metrics["accuracy_per_exp"]
-        round_fit = local_eval_metrics["rounds_selected"]
 
-        # Calculating Running Cumalative Forgetting Measure
-        cm_fmpexp = []
-        for i, e in enumerate(hist_accpexp):
-            e = json.loads(e)
-            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
-            cm_fmpexp.append(fm)
-        if cm_fmpexp:
-            cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
-        else: 
-            cmfm = 0
-
-        # Checking Cumalative Forgetting Measure
-        cprint("Check Cumalative FM", "blue")
-        cprint("History of Accuracy per Experience for this client")
-        print(json.dumps(hist_accpexp, indent=2))
-        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
-        print(f"Cumalative Forgetting Measure: {cmfm}")
- 
-        # Calculate Running Stepwise Forgetting Measure
-        sw_fmpexp = []
-        if hist_accpexp:
-            prev_accpexp = json.loads(hist_accpexp[-1])
-        else:
-            prev_accpexp = []
-        for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
-            sw_fmpexp.append(prev_acc - curr_acc)
-        if sw_fmpexp:
-            swfm = sum(sw_fmpexp)/NUM_EXP 
-        else: 
+        if drop_due_to_latency:
+            curr_accpexp = []
+            stream_loss = 0.0
+            stream_acc = 0.0
+            cm_fmpexp = []
+            sw_fmpexp = []
+            cmfm = 0.0
             swfm = 0.0
+        else:
+            # Calc Accuracy per Experience 
+            curr_accpexp = []
+            for res in results:
+                for exp, acc in res.items():
+                    if exp.startswith("Top1_Acc_Exp/"):
+                        curr_accpexp.append(float(acc))
 
-        # Checking Stepwise Forgetting Measure
-        cprint("Check StepWise FM", "blue")
-        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-        print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
-        print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
-        print(f"StepWise Forgetting Measure: {swfm}")
+            # Get Local Eval Metrics from Avalanche
+            last_metrics = self.evaluation.get_last_metrics()
+            print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
+            
+            # Handle different stream naming conventions
+            stream_suffix = "/eval_phase/test_stream"
+
+            stream_loss = last_metrics.get(f"Loss_Stream{stream_suffix}", 0.0)
+            stream_acc = last_metrics.get(f"Top1_Acc_Stream{stream_suffix}", 0.0)
+
+            # Calculating Forgetting Measures
+            hist_accpexp = local_eval_metrics["accuracy_per_exp"]
+
+            cm_fmpexp = []
+            if curr_accpexp:
+                for i, e in enumerate(hist_accpexp):
+                    e = json.loads(e)
+                    fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
+                    cm_fmpexp.append(fm)
+            if cm_fmpexp:
+                cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
+            else: 
+                cmfm = 0.0
+
+            cprint("Check Cumalative FM", "blue")
+            cprint("History of Accuracy per Experience for this client")
+            print(json.dumps(hist_accpexp, indent=2))
+            print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+            print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+            print(f"Cumalative Forgetting Measure: {cmfm}")
+ 
+            sw_fmpexp = []
+            if hist_accpexp and curr_accpexp:
+                prev_accpexp = json.loads(hist_accpexp[-1]) if hist_accpexp else []
+                for prev_acc, curr_acc in zip(prev_accpexp, curr_accpexp):
+                    sw_fmpexp.append(prev_acc - curr_acc)
+            if sw_fmpexp:
+                swfm = sum(sw_fmpexp)/NUM_EXP 
+            else: 
+                swfm = 0.0
+
+            cprint("Check StepWise FM", "blue")
+            print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+            prev_accpexp = json.loads(hist_accpexp[-1]) if hist_accpexp else []
+            print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
+            print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
+            print(f"StepWise Forgetting Measure: {swfm}")
             
         # Make Fit Metrics Dictionary
+        total_round_time = time.time() - round_start
+
+        network_sleep_after = 0.0
+        if latency_sample is not None and not drop_due_to_latency:
+            network_sleep_after = latency_sample.upload_time_s
+            self.latency_sim.sleep_post_training(latency_sample)
+
         fit_dict_return = {
          #       "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
                 "cumalative_forgetting_measure":  float(cmfm),
@@ -256,6 +323,17 @@ class FlowerClient(NumPyClient):
                 "cumalative_forgetting_per_exp": json.dumps(cm_fmpexp),
                 "pid": self.partition_id,
                 "round": rnd,
+                "latency/enabled": bool(self.latency_enabled),
+                "latency/base_delay_s": float(base_delay_s),
+                "latency/download_time_s": float(download_time_s),
+                "latency/upload_time_s": float(upload_time_s),
+                "latency/expected_network_time_s": float(expected_network_time_s),
+                "latency/threshold_s": float(threshold_s),
+                "latency/dropped": bool(drop_due_to_latency),
+                "latency/upload_sleep_s": float(network_sleep_after),
+                "timing/training_s": float(training_duration),
+                "timing/evaluation_s": float(evaluation_duration),
+                "timing/round_total_s": float(total_round_time),
             }
         cprint("----------------------------Results After Fit--------------------------------")
         print(json.dumps(fit_dict_return, indent=4))
@@ -264,7 +342,7 @@ class FlowerClient(NumPyClient):
         
         # Logging Client State
         print("Logging Client States")
-        if rnd != 0:
+        if rnd != 0 and not drop_due_to_latency:
             if "accuracy_per_exp" not in local_eval_metrics:
                 local_eval_metrics["accuracy_per_exp"] = [json.dumps(curr_accpexp)]
             else:
