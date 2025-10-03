@@ -3,16 +3,16 @@ client:
   num_cpus: 8
   num_gpus: 0.20
   type: normal
-  epochs: 10
+  epochs: 3
   falloff: 0.0
 server:
-  num_clients: 5
+  num_clients: 10
   fraction_fit: 1
   fraction_eval: 1
   min_fit: 5
   min_eval: 5
-  num_rounds: 5
-  strategy: fedavg
+  num_rounds: 10
+  strategy: latency_aware_fedavg
 cl:
   num_experiences: 5
   strategy: naive # naive or domain | domain is for domain incremental learning, naive is for experience incrental learning (afaik)
@@ -33,11 +33,11 @@ wb:
   # name: cifar10_naive_simple_cnn
 
 latency:
-  enabled: false
+  enabled: true
   csv_path: omnet-data/latency_with_10cars2RSU_30.09.2025.csv
   sampling_mode: mean  # options: mean, trace
   scaling_factor: 1.0
-  threshold_multiplier: 1.0
+  threshold_multiplier: 10000.0
   drop_behavior: skip  # options: skip, remove
   sleep: true
   random_seed: 42

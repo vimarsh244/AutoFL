@@ -22,6 +22,16 @@ latency:
 
 All parameters can be overridden per experiment run.
 
+### Choose a latency-aware server strategy
+
+Select the Flower strategy via the `server.strategy` field. Set it to
+`latency_aware_fedavg` (default) to enable dropout-aware aggregation and
+aggregation-time logging. If you need the unmodified Flower strategy for
+comparison, use `server.strategy: vanilla_fedavg` or provide the fully qualified
+class path such as `flwr.server.strategy.FedAvg`. Any built-in Flower strategy
+name (e.g. `fedprox`, `scaffold`) continues to work, and custom classes can be
+registered under `algorithms/`.
+
 ## 2. Run baseline and latency experiments
 
 1. **Baseline**: keep `latency.enabled = false`, run `python mclmain.py`.

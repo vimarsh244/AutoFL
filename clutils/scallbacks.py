@@ -41,6 +41,28 @@ NUM_ROUNDS = cfg.server.num_rounds
 LOCAL_EPOCHS = cfg.client.epochs
 NUM_CLIENTS = cfg.server.num_clients
 
+
+def _collect_metric_list(metrics: List[Tuple[int, Metrics]], key: str):
+    values = []
+    for _, metric in metrics:
+        if key not in metric:
+            return None
+        values.append(metric[key])
+    return values
+
+
+def _load_accuracy_vectors(raw_values):
+    vectors = []
+    for value in raw_values:
+        if isinstance(value, str):
+            try:
+                vectors.append(json.loads(value))
+            except json.JSONDecodeError:
+                return None
+        else:
+            vectors.append(value)
+    return vectors
+
 # State of all rounds metrics
 
 def fit_config(server_round: int):
@@ -68,26 +90,61 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
     pid = [m["pid"] for _, m in metrics]
     rnd = metrics[0][1]["server_round"]
 
-    cumalative_forgetting_measures = [m["cumalative_forgetting_measure"] for _, m in metrics]
-    stepwise_forgetting_measures = [m["stepwise_forgetting_measure"] for _, m in metrics]
-
-    accuracypexp_pc = [json.loads(m["accuracy_per_experience"]) for _, m in metrics]
-
     examples = [num_examples for num_examples, _ in metrics]
-    weighted_accuracy_pexp = [sum(w * val for w, val in zip(examples, values))/sum(examples) for values in zip(*accuracypexp_pc)]
+    total_examples = sum(examples)
+
+    cum_forgetting = _collect_metric_list(metrics, "cumalative_forgetting_measure")
+    step_forgetting = _collect_metric_list(metrics, "stepwise_forgetting_measure")
+    accuracy_per_exp_raw = _collect_metric_list(metrics, "accuracy_per_experience")
+    accuracy_per_exp_vectors = (
+        _load_accuracy_vectors(accuracy_per_exp_raw)
+        if accuracy_per_exp_raw is not None
+        else None
+    )
 
     eval_metrics = {
-        "global/average/accuracy": sum(w_accuracies) / sum(examples),
-        "global/client/accuracy": {id: acc for id, acc in zip(pid,client_accuracies)},
-        "global/average/loss": sum(w_losses) / sum(examples),
+        "global/average/accuracy": sum(w_accuracies) / total_examples,
+        "global/client/accuracy": {id: acc for id, acc in zip(pid, client_accuracies)},
+        "global/average/loss": sum(w_losses) / total_examples,
         "global/client/loss": {id: loss for id, loss in zip(pid, client_losses)},
-        "global/average/cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
-        "global/client/cumalative_forgetting": {id: cmfm for id, cmfm in zip(pid, cumalative_forgetting_measures)},
-        "global/average/stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
-        "global/client/stepwise_forgetting": {id: swfm for id, swfm in zip(pid, stepwise_forgetting_measures)},
-        "global/experience/accuracy": {id: acc for id, acc in zip(pid, weighted_accuracy_pexp)},
     }
 
+    if cum_forgetting is not None:
+        avg_cum = sum(cum_forgetting) / len(cum_forgetting)
+        eval_metrics.update(
+            {
+                "global/average/cumalative_forgetting": avg_cum,
+                "global/client/cumalative_forgetting": {
+                    id: cmfm for id, cmfm in zip(pid, cum_forgetting)
+                },
+            }
+        )
+    else:
+        log(WARNING, "Missing 'cumalative_forgetting_measure' in evaluation metrics; skipping aggregate logging for this field.")
+
+    if step_forgetting is not None:
+        avg_step = sum(step_forgetting) / len(step_forgetting)
+        eval_metrics.update(
+            {
+                "global/average/stepwise_forgetting": avg_step,
+                "global/client/stepwise_forgetting": {
+                    id: swfm for id, swfm in zip(pid, step_forgetting)
+                },
+            }
+        )
+    else:
+        log(WARNING, "Missing 'stepwise_forgetting_measure' in evaluation metrics; skipping aggregate logging for this field.")
+
+    if accuracy_per_exp_vectors is not None:
+        weighted_accuracy_pexp = [
+            sum(w * val for w, val in zip(examples, values)) / total_examples
+            for values in zip(*accuracy_per_exp_vectors)
+        ]
+        eval_metrics["global/experience/accuracy"] = {
+            id: acc for id, acc in zip(pid, weighted_accuracy_pexp)
+        }
+    else:
+        log(WARNING, "Missing 'accuracy_per_experience' in evaluation metrics; skipping per-experience aggregates.")
 
     wandb.log(eval_metrics, step=rnd)
 
@@ -98,17 +155,27 @@ def evaluate_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metri
         aggregate_row = {
             "global/average/accuracy": eval_metrics["global/average/accuracy"],
             "global/average/loss": eval_metrics["global/average/loss"],
-            "global/average_cumalative_forgetting": eval_metrics["global/average_cumalative_forgetting"],
-            "global/average_stepwise_forgetting": eval_metrics["global/average_stepwise_forgetting"],
         }
+        if "global/average/cumalative_forgetting" in eval_metrics:
+            aggregate_row["global/average_cumalative_forgetting"] = eval_metrics[
+                "global/average/cumalative_forgetting"
+            ]
+        if "global/average/stepwise_forgetting" in eval_metrics:
+            aggregate_row["global/average_stepwise_forgetting"] = eval_metrics[
+                "global/average/stepwise_forgetting"
+            ]
         recorder.log_aggregate_metrics(rnd, "eval", aggregate_row)
 
-    return {
-            "global/average_accuracy": sum(w_accuracies) / sum(examples),
-            "global/average_loss": sum(w_losses) / sum(examples),
-            "global/average_cumalative_forgetting": sum(cumalative_forgetting_measures) / len(cumalative_forgetting_measures),
-            "global/average_stepwise_forgetting": sum(stepwise_forgetting_measures) / len(stepwise_forgetting_measures),
-            }
+    result_metrics = {
+        "global/average_accuracy": eval_metrics["global/average/accuracy"],
+        "global/average_loss": eval_metrics["global/average/loss"],
+    }
+    if cum_forgetting is not None:
+        result_metrics["global/average_cumalative_forgetting"] = sum(cum_forgetting) / len(cum_forgetting)
+    if step_forgetting is not None:
+        result_metrics["global/average_stepwise_forgetting"] = sum(step_forgetting) / len(step_forgetting)
+
+    return result_metrics
 
 def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """Calculate Metrics After Fit of Clients"""

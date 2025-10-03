@@ -303,8 +303,9 @@ class LatencySimulator:
         total_network_time_s = self.scaling_factor * (base_delay_s + download_time_s + upload_time_s)
 
         threshold_s = self.scaling_factor * (
-            stats.mean_delay_s + (self.threshold_multiplier * self._safe_value(stats.std_delay_s))
+            stats.mean_delay_s * self.threshold_multiplier + (self.threshold_multiplier * self._safe_value(stats.std_delay_s))
         )
+        # TODO: modified this here temperorily for even mean to be higher
         exceeded = total_network_time_s > threshold_s if math.isfinite(threshold_s) else False
 
         sample = ClientLatencySample(
