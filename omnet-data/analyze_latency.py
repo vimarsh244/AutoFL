@@ -213,12 +213,38 @@ def plot_frame_delay_series(frame_delay: pd.DataFrame, output_path: Path) -> Non
     for car_id, group in frame_delay.groupby("car_id"):
         subset = downsample(group.sort_values("time"))
         ax.plot(
-            subset["time"],
+            # subset["time"],
+            np.arange(0, len(subset["value"])),  # x values
             subset["value"],
             label=f"Car {car_id}",
             linewidth=1.2,
             alpha=0.8,
         )
+    
+    # only doing for the first car to avoid clutter
+    # if "car_id" in frame_delay.columns:
+    #     first_car_id = frame_delay["car_id"].min()
+    #     first_car_data = frame_delay[frame_delay["car_id"] == first_car_id]
+    #     if not first_car_data.empty:
+    #         # mean_delay = first_car_data["value"].mean()
+    #         # ax.axhline(mean_delay, color="red", linestyle="--", label=f"Mean Delay Car {first_car_id}")
+    #         subset = downsample(first_car_data.sort_values("time"))
+    #         import numpy as np
+    #         ax.plot(
+    #             # subset["time"],
+
+    #             # np.array([0, len(subset["value"]])]) * [0, 1],  # x=0 line
+    #             # np.zeros(len(subset["value"])),  # y=0 line
+    #             np.arange(0, len(subset["value"])),  # x values
+    #             subset["value"],
+    #             label=f"Car {first_car_id}",
+    #             linestyle="None",
+    #             marker="o",
+    #             markersize=3,
+
+    #             alpha=0.8,
+    #         )
+    #         print(f"car 0 no o fsamples ",len(subset["value"]))
 
     ax.set_title("VoIP Frame Delay per Car")
     ax.set_xlabel("Simulation Time [s]")

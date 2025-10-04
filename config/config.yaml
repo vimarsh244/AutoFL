@@ -35,7 +35,7 @@ wb:
 latency:
   enabled: true
   csv_path: omnet-data/latency_with_10cars2RSU_30.09.2025.csv
-  sampling_mode: mean  # options: mean, trace
+  sampling_mode: chunk  # options: mean, trace, chunk, random
   scaling_factor: 1.0
   threshold_multiplier: 10000.0
   drop_behavior: skip  # options: skip, remove

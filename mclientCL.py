@@ -189,6 +189,7 @@ class FlowerClient(NumPyClient):
             expected_network_time_s = latency_sample.total_network_time_s
             threshold_s = latency_sample.threshold_s
             exceeded_threshold = latency_sample.exceeded_threshold
+            cprint("Time client took: {:.3f}s (threshold {:.3f}s) ".format(expected_network_time_s, threshold_s), "blue")
             if exceeded_threshold and not self.permanent_drop:
                 cprint(
                     f"Client {self.partition_id} latency sample {expected_network_time_s:.3f}s exceeds threshold {threshold_s:.3f}s",
