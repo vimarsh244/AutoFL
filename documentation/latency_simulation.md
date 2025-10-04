@@ -10,7 +10,7 @@ Update your experiment configuration (for example `config/config.yaml` or a Hydr
 latency:
   enabled: true                       # toggle latency injection
   csv_path: omnet-data/latency_with_10cars2RSU_30.09.2025.csv
-  sampling_mode: mean                 # mean | trace | random
+  sampling_mode: mean                 # mean | trace | random | chunk
   scaling_factor: 1.0                 # global multiplier applied to delays
   threshold_multiplier: 1.0           # std-dev multiplier for drop threshold
   drop_behavior: skip                 # skip | remove
@@ -18,6 +18,9 @@ latency:
   upload_multiplier: 1.0              # scale generated throughput (upload)
   download_multiplier: 1.0            # scale received throughput (download)
   max_clients: 10                     # number of clients embedded in the trace
+  skip_if_slow_aggregation: false     # drop round when aggregation exceeds OMNeT expectation (mean mode)
+  skip_if_slow_margin: 1.0            # multiplier applied to expected max delay before skipping
+  log_round_time_variance: false      # emit with/without latency round timings for comparison
 ```
 
 All parameters can be overridden per experiment run.
@@ -31,6 +34,27 @@ comparison, use `server.strategy: vanilla_fedavg` or provide the fully qualified
 class path such as `flwr.server.strategy.FedAvg`. Any built-in Flower strategy
 name (e.g. `fedprox`, `scaffold`) continues to work, and custom classes can be
 registered under `algorithms/`.
+
+### Chunk sampling mode
+
+Set `latency.sampling_mode: chunk` to slice each client's delay trace into
+`server.num_rounds` contiguous windows (e.g., samples `0–199`, `200–399`, …).
+Each round replays the mean delay of its window, preserving the sequential
+behaviour captured by OMNeT++ while remaining deterministic.
+
+### Skip slow aggregations
+
+When the mean sampler is active you can protect FedAvg by enabling
+`latency.skip_if_slow_aggregation: true`. The server compares the measured
+aggregation time with the maximum OMNeT-derived network delay (scaled via
+`skip_if_slow_margin`) and discards the update when the server is slower than
+expected.
+
+### Compare round timings in one run
+
+Set `latency.log_round_time_variance: true`.
+Inspect `client_round_metrics.csv` for `timing/round_total_s` vs `timing/round_without_latency_s`.
+Reference `aggregate_metrics.csv` (`local/average/round_time_variance_s`) to quantify the injected component.
 
 ## 2. Run baseline and latency experiments
 

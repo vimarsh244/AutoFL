@@ -335,6 +335,15 @@ class FlowerClient(NumPyClient):
                 "timing/evaluation_s": float(evaluation_duration),
                 "timing/round_total_s": float(total_round_time),
             }
+
+        if self.latency_sim.log_round_time_variance:
+            round_without_latency = total_round_time
+            if self.latency_enabled and expected_network_time_s > 0:
+                round_without_latency = max(total_round_time - expected_network_time_s, 0.0)
+            fit_dict_return["timing/round_without_latency_s"] = float(round_without_latency)
+            fit_dict_return["timing/round_latency_component_s"] = float(
+                max(total_round_time - round_without_latency, 0.0)
+            )
         cprint("----------------------------Results After Fit--------------------------------")
         print(json.dumps(fit_dict_return, indent=4))
         cprint('-----------------------------------------------------------------------')

@@ -12,7 +12,8 @@ from clutils.scallbacks import (
     eval_config,
 )
 from config_utils import load_config
-from algorithms import STRATEGY_REGISTRY
+from algorithms import STRATEGY_REGISTRY, LatencyAwareFedAvg
+from omegaconf import DictConfig, OmegaConf
 
 cfg = load_config()
 
@@ -74,17 +75,30 @@ def _resolve_strategy_class(strategy_name: str):
 
 StrategyCls = _resolve_strategy_class(cfg.server.get("strategy", "latency_aware_fedavg"))
 
-strategy = StrategyCls(
-    fraction_fit=cfg.server.fraction_fit,
-    fraction_evaluate=cfg.server.fraction_eval,
-    min_fit_clients=cfg.server.min_fit,
-    min_evaluate_clients=cfg.server.min_eval,
-    min_available_clients=cfg.server.num_clients,
-    on_fit_config_fn=fit_config,
-    on_evaluate_config_fn=eval_config,
-    evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
-    fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
-)
+strategy_kwargs = {
+    "fraction_fit": cfg.server.fraction_fit,
+    "fraction_evaluate": cfg.server.fraction_eval,
+    "min_fit_clients": cfg.server.min_fit,
+    "min_evaluate_clients": cfg.server.min_eval,
+    "min_available_clients": cfg.server.num_clients,
+    "on_fit_config_fn": fit_config,
+    "on_evaluate_config_fn": eval_config,
+    "evaluate_metrics_aggregation_fn": evaluate_metrics_aggregation_fn,
+    "fit_metrics_aggregation_fn": fit_metrics_aggregation_fn,
+}
+
+raw_latency_cfg = cfg.get("latency", {})
+if isinstance(raw_latency_cfg, DictConfig):
+    latency_cfg = OmegaConf.to_container(raw_latency_cfg, resolve=True)
+elif isinstance(raw_latency_cfg, dict):
+    latency_cfg = raw_latency_cfg
+else:
+    latency_cfg = {}
+
+if issubclass(StrategyCls, LatencyAwareFedAvg):
+    strategy_kwargs["latency_cfg"] = latency_cfg
+
+strategy = StrategyCls(**strategy_kwargs)
 
 def server_fn(context: Context) -> ServerAppComponents:
     """Construct components that set the ServerApp behaviour.

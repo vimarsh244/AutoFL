@@ -194,6 +194,9 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     round_times = [m.get("timing/round_total_s", 0.0) for _, m in metrics]
     download_times = [m.get("latency/download_time_s", 0.0) for _, m in metrics]
     upload_times = [m.get("latency/upload_time_s", 0.0) for _, m in metrics]
+    has_round_baseline = any("timing/round_without_latency_s" in m for _, m in metrics)
+    round_times_without_latency = [m.get("timing/round_without_latency_s", 0.0) for _, m in metrics] if has_round_baseline else []
+    latency_components = [m.get("timing/round_latency_component_s", 0.0) for _, m in metrics] if has_round_baseline else []
 
     # Round and Partition Id's
     rnd = metrics[0][1]["round"]
@@ -221,6 +224,13 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "local/average/upload_time_s": float(sum(upload_times) / len(upload_times)) if upload_times else 0.0,
         }
 
+    if round_times_without_latency:
+        avg_round_without_latency = float(sum(round_times_without_latency) / len(round_times_without_latency))
+        avg_latency_component = float(sum(latency_components) / len(latency_components)) if latency_components else 0.0
+        fit_metrics["local/average/round_time_without_latency_s"] = avg_round_without_latency
+        fit_metrics["local/average/latency_component_s"] = avg_latency_component
+        fit_metrics["local/average/round_time_variance_s"] = fit_metrics["local/average/round_time_s"] - avg_round_without_latency
+
     # Logging to Wandb
     wandb.log(fit_metrics, step=rnd)
 
@@ -239,6 +249,9 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
             "local/average/download_time_s": fit_metrics.get("local/average/download_time_s", 0.0),
             "local/average/upload_time_s": fit_metrics.get("local/average/upload_time_s", 0.0),
         }
+        if round_times_without_latency:
+            aggregate_row["local/average/round_time_without_latency_s"] = fit_metrics.get("local/average/round_time_without_latency_s", 0.0)
+            aggregate_row["local/average/round_time_variance_s"] = fit_metrics.get("local/average/round_time_variance_s", 0.0)
         recorder.log_aggregate_metrics(rnd, "fit", aggregate_row)
 
     return {
@@ -248,4 +261,6 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "local/average_stepwise_forgetting": sum(stepwise_forgetting_measures) /  len(stepwise_forgetting_measures),
         "local/average_network_time": float(sum(network_times) / len(network_times)) if network_times else 0.0,
         "local/average_round_time": float(sum(round_times) / len(round_times)) if round_times else 0.0,
+        "local/average_round_time_without_latency": float(sum(round_times_without_latency) / len(round_times_without_latency)) if round_times_without_latency else 0.0,
+        "local/average_round_time_variance": fit_metrics.get("local/average/round_time_variance_s", 0.0),
             }   

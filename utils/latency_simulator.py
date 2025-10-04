@@ -181,6 +181,7 @@ class ClientLatencyStats:
     received_trace: np.ndarray
     generated_mean_kbps: float
     received_mean_kbps: float
+    delay_chunk_means: np.ndarray
 
 
 class LatencySimulator:
@@ -201,6 +202,11 @@ class LatencySimulator:
         self.download_multiplier: float = float(latency_cfg.get("download_multiplier", 1.0))
         csv_path = latency_cfg.get("csv_path", "")
         self.csv_path = Path(csv_path) if csv_path else None
+        server_cfg = cfg.get("server", {}) or {}
+        self.total_rounds = int(server_cfg.get("num_rounds", 1)) if server_cfg is not None else 1
+        self.skip_if_slow_aggregation: bool = bool(latency_cfg.get("skip_if_slow_aggregation", False))
+        self.skip_if_slow_margin: float = float(latency_cfg.get("skip_if_slow_margin", 1.0))
+        self.log_round_time_variance: bool = bool(latency_cfg.get("log_round_time_variance", False))
 
         self._rng = np.random.default_rng(self.random_seed)
         self._stats: Dict[int, ClientLatencyStats] = {}
@@ -240,6 +246,7 @@ class LatencySimulator:
 
             gen_mean = self._time_weighted_average(generated_df, client_id)
             rec_mean = self._time_weighted_average(received_df, client_id)
+            delay_chunk_means = self._compute_chunk_means(delay_trace)
 
             stats = ClientLatencyStats(
                 mean_delay_s=mean_delay_s,
@@ -249,6 +256,7 @@ class LatencySimulator:
                 received_trace=received_trace if received_trace is not None else np.array([]),
                 generated_mean_kbps=gen_mean,
                 received_mean_kbps=rec_mean,
+                delay_chunk_means=delay_chunk_means,
             )
             self._stats[client_id] = stats
 
@@ -270,9 +278,19 @@ class LatencySimulator:
             return float("nan")
         return float(time_weighted_mean(subset))
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    def _compute_chunk_means(self, trace: np.ndarray) -> np.ndarray:
+        if trace.size == 0 or self.total_rounds <= 0:
+            return np.array([])
+        chunks = np.array_split(trace, self.total_rounds)
+        fallback = float(np.mean(trace)) if trace.size else 0.0
+        means: List[float] = []
+        for chunk in chunks:
+            if chunk.size == 0:
+                means.append(fallback)
+            else:
+                means.append(float(np.mean(chunk)))
+        return np.array(means, dtype=float)
+
     def has_client(self, client_id: int) -> bool:
         return client_id in self._stats
 
@@ -322,16 +340,18 @@ class LatencySimulator:
     def should_remove_permanently(self) -> bool:
         return self.drop_behavior == "remove"
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
     def _sample_delay(self, stats: ClientLatencyStats, round_idx: int) -> float:
         # Delay trace is in seconds already.
-        if self.sampling_mode == "mean" or stats.delay_trace.size == 0:
+        if stats.delay_trace.size == 0:
             return self._safe_value(stats.mean_delay_s)
-        if self.sampling_mode == "trace":
-            if stats.delay_trace.size == 0:
+        if self.sampling_mode == "mean":
+            return self._safe_value(stats.mean_delay_s)
+        if self.sampling_mode == "chunk":
+            if stats.delay_chunk_means.size == 0:
                 return self._safe_value(stats.mean_delay_s)
+            index = max(0, min(round_idx - 1, stats.delay_chunk_means.size - 1))
+            return float(stats.delay_chunk_means[index])
+        if self.sampling_mode == "trace":
             index = round_idx % stats.delay_trace.size
             return float(stats.delay_trace[index])
         if self.sampling_mode == "random":
@@ -345,7 +365,7 @@ class LatencySimulator:
         round_idx: int,
     ) -> float:
         candidate = float(mean_kbps) if not math.isnan(mean_kbps) else 0.0
-        if self.sampling_mode == "mean" or trace.size == 0:
+        if self.sampling_mode in {"mean", "chunk"} or trace.size == 0:
             return max(candidate, self.throughput_floor_kbps)
         if self.sampling_mode == "trace":
             index = round_idx % trace.size
@@ -401,6 +421,11 @@ class ServerRoundRecord:
     total_results: int
     accepted_results: int
     dropped_clients: List[int]
+    expected_mean_network_time_s: float
+    expected_max_network_time_s: float
+    skipped_due_to_latency: bool
+    aggregation_threshold_s: float
+    aggregation_minus_expected_mean_s: float
 
 
 class RuntimeMetricsRecorder:
@@ -453,6 +478,11 @@ class RuntimeMetricsRecorder:
         total_results: int,
         accepted_results: int,
         dropped_clients: Optional[List[int]] = None,
+        expected_mean_network_time_s: float = float("nan"),
+        expected_max_network_time_s: float = float("nan"),
+        skipped_due_to_latency: bool = False,
+        aggregation_threshold_s: float = float("nan"),
+        aggregation_minus_expected_mean_s: float = float("nan"),
     ) -> None:
         if not self.save_server:
             return
@@ -462,6 +492,11 @@ class RuntimeMetricsRecorder:
             total_results=total_results,
             accepted_results=accepted_results,
             dropped_clients=dropped_clients or [],
+            expected_mean_network_time_s=expected_mean_network_time_s,
+            expected_max_network_time_s=expected_max_network_time_s,
+            skipped_due_to_latency=skipped_due_to_latency,
+            aggregation_threshold_s=aggregation_threshold_s,
+            aggregation_minus_expected_mean_s=aggregation_minus_expected_mean_s,
         )
         self._server_records.append(record)
 
@@ -503,6 +538,11 @@ class RuntimeMetricsRecorder:
                             "total_results": record.total_results,
                             "accepted_results": record.accepted_results,
                             "dropped_clients": ",".join(map(str, record.dropped_clients)),
+                            "expected_mean_network_time_s": record.expected_mean_network_time_s,
+                            "expected_max_network_time_s": record.expected_max_network_time_s,
+                            "skipped_due_to_latency": record.skipped_due_to_latency,
+                            "aggregation_threshold_s": record.aggregation_threshold_s,
+                            "aggregation_minus_expected_mean_s": record.aggregation_minus_expected_mean_s,
                         }
                         for record in self._server_records
                     ]
