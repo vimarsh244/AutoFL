@@ -3,12 +3,15 @@ dataset:
   workload: cifar100
   batch_size: 128  # Large batch for GPU
   num_classes: 100
-  split: iid
+  split: niid
+  niid:
+    alpha: 0.5  # higher heterogeneity
+    seed: 42
 
 model:
-  # name: resnet  # ResNet for better performance on CIFAR100
-  name: mobilenet
-  version: v3_large
+  name: resnet  # ResNet for better performance on CIFAR100
+  #name: mobilenet
+  #version: v3_large
   pretrained: false
   num_classes: 100
 
@@ -17,12 +20,16 @@ cl:
   num_experiences: 10  # standard incremental learning experiences
 
 training:
-  learning_rate: 0.0001  # lower lr for resnet on cifar100
+  learning_rate: 0.001  
   # epochs: 5
   batch_size: 64
 
+latency:
+  sampling_mode: chunk  # options: mean, trace, chunk, random
+  threshold_multiplier: 15000.0
+
 server:
-  num_rounds: 10
+  num_rounds: 100
   num_clients: 10  # Balanced for GPU memory
   fraction_fit: 1.0
   min_fit: 5  # Match num_clients
@@ -34,5 +41,5 @@ client:
   epochs: 3
 
 wb:
-  project: autofl-testing  
-  name: f_cifar100_naive_resnet_gpu 
+  project: autofl-testing
+  name: f_cifar100_naive_resnet_latency(chunk)_no_sleep(mul150)_niid(a=0.2)

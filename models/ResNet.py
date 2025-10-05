@@ -28,7 +28,7 @@ class ResNet(nn.Module):
         # self.model.fc = nn.Linear(in_features, num_classes)
 
         # using the custom resnet50 model defined in ResnetModel.py
-        self.model = resnet50_custom()
+        self.model = resnet18_custom()
 
     def forward(self, x):
         return self.model(x)
