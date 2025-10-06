@@ -145,9 +145,81 @@ class FlowerClient(NumPyClient):
         self.permanent_drop = False
         self._payload_bytes = None
 
+        self._train_stream_attr, self._train_stream = self._resolve_stream("train")
+        self._test_stream_attr, self._test_stream = self._resolve_stream("test")
+        self._train_stream_name = self._get_stream_name(self._train_stream, self._train_stream_attr)
+        self._test_stream_name = self._get_stream_name(self._test_stream, self._test_stream_attr)
+        self._num_train_experiences = len(self._train_stream)
+        self._num_test_experiences = len(self._test_stream)
+        if self._num_train_experiences == 0:
+            raise ValueError("Benchmark does not provide any training experiences")
+        if self._num_test_experiences == 0:
+            raise ValueError("Benchmark does not provide any evaluation experiences")
+        lengths_count = len(self.trainlen_per_exp) if self.trainlen_per_exp else 0
+        if lengths_count and lengths_count != self._num_train_experiences:
+            warnings.warn(
+                (
+                    f"Configured experience count ({lengths_count}) does not match benchmark stream"
+                    f" length ({self._num_train_experiences}); using stream length for scheduling."
+                ),
+                RuntimeWarning,
+            )
+        self._effective_num_experiences = (
+            lengths_count
+            if lengths_count
+            else self._num_train_experiences
+            if self._num_train_experiences
+            else NUM_EXP
+        )
+
         # To add  later: Battery, Location, Speed, Mobility_Trace
 
         print(self.client_state.config_records)
+
+    def _resolve_stream(self, stream_type: str):
+        stream_candidates = {
+            "train": ("train_stream", "train_datasets_stream"),
+            "test": (
+                "test_stream",
+                "test_datasets_stream",
+                "validation_stream",
+                "valid_stream",
+                "eval_stream",
+                "eval_datasets_stream",
+            ),
+        }
+        for attr in stream_candidates.get(stream_type, ()):  # type: ignore[arg-type]
+            stream = getattr(self.benchmark, attr, None)
+            if stream is not None:
+                return attr, stream
+        raise AttributeError(
+            f"Benchmark {type(self.benchmark)} does not provide a '{stream_type}' stream"
+        )
+
+    @staticmethod
+    def _get_stream_name(stream, attr_name: str) -> str:
+        stream_name = getattr(stream, "name", None)
+        if stream_name:
+            return stream_name
+        if attr_name:
+            return attr_name.replace("_stream", "")
+        return stream.__class__.__name__
+
+    @staticmethod
+    def _extract_stream_metric(metrics: dict, metric_prefix: str, stream_name: str, phase: str = "eval_phase") -> float:
+        primary_key = f"{metric_prefix}/{phase}/{stream_name}"
+        if primary_key in metrics:
+            return float(metrics[primary_key])
+        for key, value in metrics.items():
+            if key.startswith(metric_prefix) and f"/{phase}/" in key and key.endswith(stream_name):
+                return float(value)
+        for key, value in metrics.items():
+            if key.startswith(metric_prefix) and f"/{phase}/" in key:
+                return float(value)
+        for key, value in metrics.items():
+            if key.startswith(metric_prefix):
+                return float(value)
+        return 0.0
 
     # Get Params from Global Model
     def get_parameters(self, config):
@@ -205,28 +277,21 @@ class FlowerClient(NumPyClient):
             self.permanent_drop = True
 
         results = []
-        
-        # Handle different benchmark types
-        if hasattr(self.benchmark, 'train_stream'):
-            train_stream = self.benchmark.train_stream
-        elif hasattr(self.benchmark, 'train_datasets_stream'): # Might not need
-            train_stream = self.benchmark.train_datasets_stream
-        else:
-            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
-            
-        # Calculate which experience to train on (cycle through available experiences)
-        experience_idx = ((rnd - 1) % NUM_EXP)
-        print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
+
+        experience_count = self._effective_num_experiences or 1
+        experience_idx = ((rnd - 1) % experience_count)
+        print(
+            f"Round {rnd}: Training on experience {experience_idx} "
+            f"(cycling through {experience_count} available experiences)"
+        )
         
         training_start = time.time()
         training_duration = 0.0
         if not drop_due_to_latency:
-            for i, experience in enumerate(train_stream):
-                if i == experience_idx:
-                    print(f"EXP: {experience.current_experience}")
-                    trainres = self.cl_strategy.train(experience)
-                    cprint('Training completed: ')
-                    break  # Only train on current experience
+            experience = self._train_stream[experience_idx]
+            print(f"EXP: {getattr(experience, 'current_experience', experience_idx)}")
+            trainres = self.cl_strategy.train(experience)
+            cprint('Training completed: ')
             training_duration = time.time() - training_start
         else:
             cprint(f"Skipping training for client {self.partition_id} due to latency threshold", "yellow")
@@ -237,7 +302,7 @@ class FlowerClient(NumPyClient):
         if not drop_due_to_latency:
             eval_start = time.time()
             print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
-            results.append(self.cl_strategy.eval(self.benchmark.test_stream))
+            results.append(self.cl_strategy.eval(self._test_stream))
             evaluation_duration = time.time() - eval_start
 
         local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
@@ -262,11 +327,12 @@ class FlowerClient(NumPyClient):
             last_metrics = self.evaluation.get_last_metrics()
             print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
             
-            # Handle different stream naming conventions
-            stream_suffix = "/eval_phase/test_stream"
-
-            stream_loss = last_metrics.get(f"Loss_Stream{stream_suffix}", 0.0)
-            stream_acc = last_metrics.get(f"Top1_Acc_Stream{stream_suffix}", 0.0)
+            stream_loss = self._extract_stream_metric(
+                last_metrics, "Loss_Stream", self._test_stream_name
+            )
+            stream_acc = self._extract_stream_metric(
+                last_metrics, "Top1_Acc_Stream", self._test_stream_name
+            )
 
             # Calculating Forgetting Measures
             hist_accpexp = local_eval_metrics["accuracy_per_exp"]
@@ -275,7 +341,9 @@ class FlowerClient(NumPyClient):
             if curr_accpexp:
                 for i, e in enumerate(hist_accpexp):
                     e = json.loads(e)
-                    fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
+                    if not curr_accpexp:
+                        continue
+                    fm = e[i % len(curr_accpexp)] - curr_accpexp[i % len(curr_accpexp)]
                     cm_fmpexp.append(fm)
             if cm_fmpexp:
                 cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
@@ -295,8 +363,8 @@ class FlowerClient(NumPyClient):
                 for prev_acc, curr_acc in zip(prev_accpexp, curr_accpexp):
                     sw_fmpexp.append(prev_acc - curr_acc)
             if sw_fmpexp:
-                swfm = sum(sw_fmpexp)/NUM_EXP 
-            else: 
+                swfm = sum(sw_fmpexp)/len(sw_fmpexp)
+            else:
                 swfm = 0.0
 
             cprint("Check StepWise FM", "blue")
@@ -391,8 +459,12 @@ class FlowerClient(NumPyClient):
             return None
         else:
             # Use the same cycling logic for experience length
-            experience_idx = ((rnd - 1) % NUM_EXP)
-            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
+            experience_idx = ((rnd - 1) % experience_count)
+            return (
+                get_parameters(self.cl_strategy.model),
+                self.trainlen_per_exp[experience_idx] if self.trainlen_per_exp else 0,
+                fit_dict_return,
+            )
 
     # Evaluate After Updating Global Model
     def evaluate(self, parameters, config):
@@ -408,16 +480,16 @@ class FlowerClient(NumPyClient):
         results = []
         print(f"------------------------Local Client {self.partition_id} Evaluation on Updated Global Model--------------------")
         
-        # Handle different benchmark types
-        if hasattr(self.benchmark, 'test_stream'):
-            test_stream = self.benchmark.test_stream
-        else:
-            test_stream = self.benchmark.test_datasets_stream
-        
+        test_stream = self._test_stream
+
         results.append(cl_strategy.eval(test_stream))
         last_metrics = evaluation.get_last_metrics()
-        stream_loss = last_metrics["Loss_Stream/eval_phase/test_stream"]
-        stream_acc = last_metrics["Top1_Acc_Stream/eval_phase/test_stream"]
+        stream_loss = self._extract_stream_metric(
+            last_metrics, "Loss_Stream", self._test_stream_name
+        )
+        stream_acc = self._extract_stream_metric(
+            last_metrics, "Top1_Acc_Stream", self._test_stream_name
+        )
         
         # Getting Accuracy per Experience for client
         curr_accpexp = []
@@ -433,7 +505,9 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
+            if not curr_accpexp:
+                continue
+            fm = e[i % len(curr_accpexp)] - curr_accpexp[i % len(curr_accpexp)]
             cm_fmpexp.append(fm)
         if cm_fmpexp:
             cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
@@ -456,7 +530,7 @@ class FlowerClient(NumPyClient):
             prev_accpexp = []
         for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
             sw_fmpexp.append(prev_acc - curr_acc)
-        swfm = sum(sw_fmpexp)/NUM_EXP
+        swfm = sum(sw_fmpexp)/len(sw_fmpexp) if sw_fmpexp else 0.0
 
         # Checking Stepwise Forgetting Measure
         cprint("Check StepWise FM", "blue")

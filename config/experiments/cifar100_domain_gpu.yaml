@@ -35,8 +35,8 @@ server:
   fraction_fit: 1.0
   min_fit: 5
   min_eval: 5
-  strategy: latency_aware_fedavg
-  #strategy: fedavg
+  #strategy: latency_aware_fedavg
+  strategy: fedavg
 
 client:
   num_cpus: 12
