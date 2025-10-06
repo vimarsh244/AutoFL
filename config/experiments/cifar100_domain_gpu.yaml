@@ -3,10 +3,11 @@ dataset:
   workload: cifar100
   batch_size: 128
   num_classes: 100
-  split: niid
-  niid:
-    alpha: 0.5  # moderate heterogeneity
-    seed: 42
+  split: iid
+  #niid:
+  #  alpha: 0.5  # moderate heterogeneity
+  #  seed: 42
+  
 
 model:
   name: resnet
@@ -15,7 +16,7 @@ model:
 
 cl:
   strategy: domain
-  num_experiences: 10
+  num_experiences: 20
 
 training:
   learning_rate: 0.001
@@ -23,6 +24,8 @@ training:
   batch_size: 64
 
 latency:
+  enabled: false
+  sleep: false
   sampling_mode: chunk  # options: mean, trace, chunk, random
   threshold_multiplier: 15000.0
 
@@ -32,6 +35,8 @@ server:
   fraction_fit: 1.0
   min_fit: 5
   min_eval: 5
+  strategy: latency_aware_fedavg
+  #strategy: fedavg
 
 client:
   num_cpus: 12
@@ -40,4 +45,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: f_cifar100_domain_resnet_niid_0.9_latency(chunk)_no_sleep(mul150)
+  name: f_cifar100_domain_resnet_no_latency_no_sleep_iid_exp20

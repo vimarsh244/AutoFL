@@ -5,7 +5,7 @@ dataset:
   num_classes: 100
   split: niid
   niid:
-    alpha: 0.5  # higher heterogeneity
+    alpha: 0.2  # higher heterogeneity
     seed: 42
 
 model:
@@ -25,8 +25,10 @@ training:
   batch_size: 64
 
 latency:
+  enabled: false
+  sleep: false
   sampling_mode: chunk  # options: mean, trace, chunk, random
-  threshold_multiplier: 15000.0
+  threshold_multiplier: 13000.0
 
 server:
   num_rounds: 100
@@ -42,4 +44,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: f_cifar100_naive_resnet_latency(chunk)_no_sleep(mul150)_niid(a=0.2)
+  name: f_cifar100_naive_resnet_no_latency_no_sleep_niid(a=0.2)

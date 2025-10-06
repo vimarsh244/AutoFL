@@ -6,7 +6,6 @@ import csv
 import json
 import math
 import re
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
@@ -194,7 +193,8 @@ class LatencySimulator:
         self.scaling_factor: float = float(latency_cfg.get("scaling_factor", 1.0))
         self.threshold_multiplier: float = float(latency_cfg.get("threshold_multiplier", 1.0))
         self.drop_behavior: str = str(latency_cfg.get("drop_behavior", "skip")).lower()
-        self.sleep: bool = bool(latency_cfg.get("sleep", True))
+        configured_sleep = bool(latency_cfg.get("sleep", False))
+        self.sleep_log: bool = bool(latency_cfg.get("sleep_log", configured_sleep))
         self.random_seed: int = int(latency_cfg.get("random_seed", 42))
         self.max_clients: int = int(latency_cfg.get("max_clients", 10))
         self.throughput_floor_kbps: float = float(latency_cfg.get("throughput_floor_kbps", 10.0))
@@ -387,18 +387,20 @@ class LatencySimulator:
             return 0.0
         return value
 
-    def sleep_pre_training(self, sample: ClientLatencySample) -> None:
-        if not self.sleep:
-            return
-        total = sample.base_delay_s + sample.download_time_s
-        if total > 0:
-            time.sleep(total)
+    @property
+    def sleep_log_enabled(self) -> bool:
+        return self.sleep_log
 
-    def sleep_post_training(self, sample: ClientLatencySample) -> None:
-        if not self.sleep:
-            return
-        if sample.upload_time_s > 0:
-            time.sleep(sample.upload_time_s)
+    def sleep_pre_training(self, sample: ClientLatencySample) -> float:
+        if not self.sleep_log or sample is None:
+            return 0.0
+        total = max(sample.base_delay_s + sample.download_time_s, 0.0)
+        return total
+
+    def sleep_post_training(self, sample: ClientLatencySample) -> float:
+        if not self.sleep_log or sample is None:
+            return 0.0
+        return max(sample.upload_time_s, 0.0)
 
 
 # ----------------------------------------------------------------------
@@ -418,6 +420,8 @@ class ClientRoundRecord:
 class ServerRoundRecord:
     round_id: int
     aggregation_time_s: float
+    aggregation_wall_clock_s: float
+    aggregation_latency_component_s: float
     total_results: int
     accepted_results: int
     dropped_clients: List[int]
@@ -483,12 +487,16 @@ class RuntimeMetricsRecorder:
         skipped_due_to_latency: bool = False,
         aggregation_threshold_s: float = float("nan"),
         aggregation_minus_expected_mean_s: float = float("nan"),
+        aggregation_wall_clock_s: float = float("nan"),
+        aggregation_latency_component_s: float = float("nan"),
     ) -> None:
         if not self.save_server:
             return
         record = ServerRoundRecord(
             round_id=round_id,
             aggregation_time_s=aggregation_time_s,
+            aggregation_wall_clock_s=aggregation_wall_clock_s,
+            aggregation_latency_component_s=aggregation_latency_component_s,
             total_results=total_results,
             accepted_results=accepted_results,
             dropped_clients=dropped_clients or [],
@@ -535,6 +543,8 @@ class RuntimeMetricsRecorder:
                         {
                             "round": record.round_id,
                             "aggregation_time_s": record.aggregation_time_s,
+                            "aggregation_wall_clock_s": record.aggregation_wall_clock_s,
+                            "aggregation_latency_component_s": record.aggregation_latency_component_s,
                             "total_results": record.total_results,
                             "accepted_results": record.accepted_results,
                             "dropped_clients": ",".join(map(str, record.dropped_clients)),

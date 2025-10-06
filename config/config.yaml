@@ -39,7 +39,8 @@ latency:
   scaling_factor: 1.0
   threshold_multiplier: 10000.0
   drop_behavior: skip  # options: skip, remove
-  sleep: true
+  sleep: false  # physical sleep is disabled; use sleep_log to simulate latency in metrics
+  sleep_log: true
   random_seed: 42
   max_clients: 10
   throughput_floor_kbps: 10.0

@@ -14,7 +14,8 @@ latency:
   scaling_factor: 1.0                 # global multiplier applied to delays
   threshold_multiplier: 1.0           # std-dev multiplier for drop threshold
   drop_behavior: skip                 # skip | remove
-  sleep: true                         # whether to sleep to emulate wall-clock delay
+  sleep: false                        # legacy flag (physical sleeping is disabled)
+  sleep_log: true                     # add sampled latency to metrics without sleeping
   upload_multiplier: 1.0              # scale generated throughput (upload)
   download_multiplier: 1.0            # scale received throughput (download)
   max_clients: 10                     # number of clients embedded in the trace
@@ -53,8 +54,10 @@ expected.
 ### Compare round timings in one run
 
 Set `latency.log_round_time_variance: true`.
-Inspect `client_round_metrics.csv` for `timing/round_total_s` vs `timing/round_without_latency_s`.
-Reference `aggregate_metrics.csv` (`local/average/round_time_variance_s`) to quantify the injected component.
+Inspect `client_round_metrics.csv` for `timing/round_total_s` (simulated),
+`timing/round_wall_clock_s` (measured) and `timing/round_latency_component_s` (injected).
+Reference `aggregate_metrics.csv` (`local/average/round_time_variance_s` and
+`local/average/simulated_latency_s`) to quantify the injected component.
 
 ## 2. Run baseline and latency experiments
 

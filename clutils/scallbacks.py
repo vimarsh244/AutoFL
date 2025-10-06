@@ -192,6 +192,8 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     network_times = [m.get("latency/expected_network_time_s", 0.0) for _, m in metrics]
     training_times = [m.get("timing/training_s", 0.0) for _, m in metrics]
     round_times = [m.get("timing/round_total_s", 0.0) for _, m in metrics]
+    round_wall_clock_times = [m.get("timing/round_wall_clock_s", m.get("timing/round_total_s", 0.0)) for _, m in metrics]
+    simulated_latency_components = [m.get("timing/simulated_latency_s", 0.0) for _, m in metrics]
     download_times = [m.get("latency/download_time_s", 0.0) for _, m in metrics]
     upload_times = [m.get("latency/upload_time_s", 0.0) for _, m in metrics]
     has_round_baseline = any("timing/round_without_latency_s" in m for _, m in metrics)
@@ -220,6 +222,8 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "local/average/network_time_s": float(sum(network_times) / len(network_times)) if network_times else 0.0,
         "local/average/training_time_s": float(sum(training_times) / len(training_times)) if training_times else 0.0,
         "local/average/round_time_s": float(sum(round_times) / len(round_times)) if round_times else 0.0,
+        "local/average/round_wall_clock_s": float(sum(round_wall_clock_times) / len(round_wall_clock_times)) if round_wall_clock_times else 0.0,
+        "local/average/simulated_latency_s": float(sum(simulated_latency_components) / len(simulated_latency_components)) if simulated_latency_components else 0.0,
         "local/average/download_time_s": float(sum(download_times) / len(download_times)) if download_times else 0.0,
         "local/average/upload_time_s": float(sum(upload_times) / len(upload_times)) if upload_times else 0.0,
         }
@@ -246,6 +250,8 @@ def fit_metrics_aggregation_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
             "local/average/network_time_s": fit_metrics.get("local/average/network_time_s", 0.0),
             "local/average/training_time_s": fit_metrics.get("local/average/training_time_s", 0.0),
             "local/average/round_time_s": fit_metrics.get("local/average/round_time_s", 0.0),
+            "local/average/round_wall_clock_s": fit_metrics.get("local/average/round_wall_clock_s", 0.0),
+            "local/average/simulated_latency_s": fit_metrics.get("local/average/simulated_latency_s", 0.0),
             "local/average/download_time_s": fit_metrics.get("local/average/download_time_s", 0.0),
             "local/average/upload_time_s": fit_metrics.get("local/average/upload_time_s", 0.0),
         }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import List, Mapping, Optional, Sequence, Tuple
 
@@ -23,6 +24,9 @@ class LatencyAwareFedAvg(FedAvg):
         self._latency_sampling_mode = str(self._latency_cfg.get("sampling_mode", "mean")).lower()
         self._skip_if_slow_aggregation = bool(self._latency_cfg.get("skip_if_slow_aggregation", False))
         self._skip_if_slow_margin = float(self._latency_cfg.get("skip_if_slow_margin", 1.0))
+        self._sleep_log_enabled = bool(
+            self._latency_cfg.get("sleep_log", self._latency_cfg.get("sleep", False))
+        )
         super().__init__(*args, **kwargs)
 
     def aggregate_fit(
@@ -49,7 +53,15 @@ class LatencyAwareFedAvg(FedAvg):
 
         start_time = time.time()
         aggregated = super().aggregate_fit(server_round, filtered_results, failures)
-        duration = time.time() - start_time
+        duration_wall_clock = time.time() - start_time
+
+        latency_component = 0.0
+        if self._sleep_log_enabled and expected_times:
+            finite_expected = [value for value in expected_times if math.isfinite(value) and value >= 0.0]
+            if finite_expected:
+                latency_component = float(np.max(finite_expected))
+
+        duration_reported = duration_wall_clock + latency_component
 
         expected_mean = float(np.mean(expected_times)) if expected_times else float("nan")
         expected_max = float(np.max(expected_times)) if expected_times else float("nan")
@@ -58,7 +70,7 @@ class LatencyAwareFedAvg(FedAvg):
             if expected_times and expected_max > 0
             else float("nan")
         )
-        aggregation_delta = duration - expected_mean if expected_times else float("nan")
+        aggregation_delta = duration_reported - expected_mean if expected_times else float("nan")
         skipped_due_to_latency = False
 
         if (
@@ -68,11 +80,11 @@ class LatencyAwareFedAvg(FedAvg):
             and expected_max > 0
         ):
             threshold = aggregation_threshold
-            if duration > threshold:
+            if duration_reported > threshold:
                 skipped_due_to_latency = True
                 print(
                     f"[LatencyAwareFedAvg] Skipping aggregation for round {server_round}: "
-                    f"{duration:.3f}s > threshold {threshold:.3f}s"
+                    f"{duration_reported:.3f}s > threshold {threshold:.3f}s"
                 )
                 aggregated = None
 
@@ -80,7 +92,7 @@ class LatencyAwareFedAvg(FedAvg):
         if recorder is not None:
             recorder.log_server_round(
                 round_id=server_round,
-                aggregation_time_s=duration,
+                aggregation_time_s=duration_reported,
                 total_results=len(results),
                 accepted_results=len(filtered_results),
                 dropped_clients=dropped_clients,
@@ -89,6 +101,8 @@ class LatencyAwareFedAvg(FedAvg):
                 skipped_due_to_latency=skipped_due_to_latency,
                 aggregation_threshold_s=aggregation_threshold,
                 aggregation_minus_expected_mean_s=aggregation_delta,
+                aggregation_wall_clock_s=duration_wall_clock,
+                aggregation_latency_component_s=latency_component,
             )
             if dropped_entries:
                 recorder.log_client_round(
@@ -99,7 +113,9 @@ class LatencyAwareFedAvg(FedAvg):
 
         wandb.log(
             {
-                "server/aggregation_time_s": duration,
+                "server/aggregation_time_s": duration_reported,
+                "server/aggregation_wall_clock_s": duration_wall_clock,
+                "server/aggregation_latency_component_s": latency_component,
                 "server/total_results": len(results), # KIND OF Useless (but keeping)
                 "server/accepted_results": len(filtered_results),
                 "server/dropped_clients": len(dropped_clients),

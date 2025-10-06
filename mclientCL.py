@@ -174,6 +174,8 @@ class FlowerClient(NumPyClient):
 
         payload_bytes = self._ensure_payload_bytes(parameters)
         latency_sample = None
+        simulated_latency_pre = 0.0
+        simulated_latency_post = 0.0
         base_delay_s = 0.0
         download_time_s = 0.0
         upload_time_s = 0.0
@@ -195,7 +197,7 @@ class FlowerClient(NumPyClient):
                     f"Client {self.partition_id} latency sample {expected_network_time_s:.3f}s exceeds threshold {threshold_s:.3f}s",
                     "yellow",
                 )
-            self.latency_sim.sleep_pre_training(latency_sample)
+            simulated_latency_pre = self.latency_sim.sleep_pre_training(latency_sample)
 
         drop_due_to_latency = self.permanent_drop or (self.latency_enabled and exceeded_threshold)
         if drop_due_to_latency and not self.permanent_drop and self.latency_sim.should_remove_permanently():
@@ -305,12 +307,18 @@ class FlowerClient(NumPyClient):
             print(f"StepWise Forgetting Measure: {swfm}")
             
         # Make Fit Metrics Dictionary
-        total_round_time = time.time() - round_start
+        total_round_time_wall = time.time() - round_start
 
         network_sleep_after = 0.0
         if latency_sample is not None and not drop_due_to_latency:
-            network_sleep_after = latency_sample.upload_time_s
-            self.latency_sim.sleep_post_training(latency_sample)
+            simulated_latency_post = self.latency_sim.sleep_post_training(latency_sample)
+            network_sleep_after = upload_time_s
+
+        simulated_latency_total = 0.0
+        if latency_sample is not None and not drop_due_to_latency:
+            simulated_latency_total = simulated_latency_pre + simulated_latency_post
+
+        reported_round_total = total_round_time_wall + simulated_latency_total
 
         fit_dict_return = {
          #       "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
@@ -334,17 +342,14 @@ class FlowerClient(NumPyClient):
                 "latency/upload_sleep_s": float(network_sleep_after),
                 "timing/training_s": float(training_duration),
                 "timing/evaluation_s": float(evaluation_duration),
-                "timing/round_total_s": float(total_round_time),
+                "timing/round_wall_clock_s": float(total_round_time_wall),
+                "timing/simulated_latency_s": float(simulated_latency_total),
+                "timing/round_total_s": float(reported_round_total),
             }
 
         if self.latency_sim.log_round_time_variance:
-            round_without_latency = total_round_time
-            if self.latency_enabled and expected_network_time_s > 0:
-                round_without_latency = max(total_round_time - expected_network_time_s, 0.0)
-            fit_dict_return["timing/round_without_latency_s"] = float(round_without_latency)
-            fit_dict_return["timing/round_latency_component_s"] = float(
-                max(total_round_time - round_without_latency, 0.0)
-            )
+            fit_dict_return["timing/round_without_latency_s"] = float(total_round_time_wall)
+            fit_dict_return["timing/round_latency_component_s"] = float(simulated_latency_total)
         cprint("----------------------------Results After Fit--------------------------------")
         print(json.dumps(fit_dict_return, indent=4))
         cprint('-----------------------------------------------------------------------')
@@ -428,7 +433,7 @@ class FlowerClient(NumPyClient):
         cm_fmpexp = []
         for i, e in enumerate(hist_accpexp):
             e = json.loads(e)
-            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP];
+            fm = e[i % NUM_EXP] - curr_accpexp[i % NUM_EXP]
             cm_fmpexp.append(fm)
         if cm_fmpexp:
             cmfm = sum(cm_fmpexp)/len(cm_fmpexp)
