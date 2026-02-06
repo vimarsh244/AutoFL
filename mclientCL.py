@@ -4,8 +4,9 @@ import warnings
 from typing import List
 
 import torch
-from flwr.client import Client
-from flwr.common import Context
+import gc  # For garbage collection
+from flwr.client import Client, ClientApp, NumPyClient
+from flwr.common import Metrics, Context, ConfigsRecord
 
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
 
@@ -69,6 +70,301 @@ def get_model():
     from utils.model_factory import create_model
 
     return create_model(cfg)
+  
+# Persistent State of Clients
+partition_strategies = [make_cl_strat(get_model().to(DEVICE)) for _ in range(NUM_CLIENTS)]
+
+# Set client_id for FedWeIT strategies
+for client_id, (strategy, evaluation) in enumerate(partition_strategies):
+    if hasattr(strategy, 'current_client_id'):
+        strategy.current_client_id = client_id
+        print(f"Set client_id {client_id} for FedWeIT strategy")
+
+# Client Class
+class FlowerClient(NumPyClient):
+    def __init__(self, context: Context, net, benchmark, trainlen_per_exp, testlen_per_exp, partition_id):
+        self.client_state = context.state
+        # simplified config records management - avoid ConfigsRecord compatibility issues
+        if not hasattr(self.client_state, 'config_records'):
+            self.client_state.config_records = {
+                "local_eval_metrics": {},
+                "global_eval_metrics": {}, 
+                "availability": {}
+            }
+        # Special Provision for acc per exp as needed to calculate fm
+        if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
+            self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
+        if "accuracy_per_exp" not in self.client_state.config_records["global_eval_metrics"]:
+            self.client_state.config_records["global_eval_metrics"]["accuracy_per_exp"] = []
+        if "rounds_selected" not in self.client_state.config_records["local_eval_metrics"]:
+            self.client_state.config_records["local_eval_metrics"]["rounds_selected"] = []
+        if "rounds_selected" not in self.client_state.config_records["global_eval_metrics"]:
+            self.client_state.config_records["global_eval_metrics"]["rounds_selected"] = []
+        self.net = net
+        self.benchmark = benchmark
+        self.trainlen_per_exp = trainlen_per_exp
+        self.testlen_per_exp = testlen_per_exp
+        self.cl_strategy, self.evaluation = partition_strategies[partition_id]
+        self.partition_id = partition_id
+
+        # To add  later: Battery, Location, Speed, Mobility_Trace
+
+        print(self.client_state.config_records)
+
+    # Get Params from Global Model
+    def get_parameters(self, config):
+        return get_parameters(self.cl_strategy.model)
+
+    # Fit on Local Data
+    def fit(self, parameters, config):
+        set_parameters(self.cl_strategy.model, parameters)
+        rnd = config["server_round"]
+        num_rounds = config["num_rounds"]
+
+        cprint("FIT")
+        print(f"Client {self.partition_id} Fit on round: {rnd}")
+
+        # Train on Experience as per Round - Fixed: Train on current experience only
+        cprint("Starting Training")
+        results = []
+        
+        # Handle different benchmark types
+        if hasattr(self.benchmark, 'train_stream'):
+            train_stream = self.benchmark.train_stream
+        elif hasattr(self.benchmark, 'train_datasets_stream'):
+            train_stream = self.benchmark.train_datasets_stream
+        else:
+            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
+            
+        # Calculate which experience to train on (cycle through available experiences)
+        experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+        print(f"Round {rnd}: Training on experience {experience_idx} (cycling through {len(self.trainlen_per_exp)} experiences)")
+        
+        for i, experience in enumerate(train_stream):
+            if i == experience_idx:
+                print(f"EXP: {experience.current_experience}")
+                trainres = self.cl_strategy.train(experience)
+                cprint('Training completed: ')
+                break  # Only train on current experience
+
+        # Local Eval after fit on client for metrics
+        print(f"Local Evaluation of client {self.partition_id} on round {rnd}")
+        
+        # Handle different benchmark types for evaluation
+        if hasattr(self.benchmark, 'test_stream'):
+            test_stream = self.benchmark.test_stream
+        elif hasattr(self.benchmark, 'test_datasets_stream'):
+            test_stream = self.benchmark.test_datasets_stream
+        else:
+            raise ValueError(f"Unknown benchmark type: {type(self.benchmark)}")
+            
+        results.append(self.cl_strategy.eval(test_stream))
+
+        # Calc Accuracy per Experience 
+        curr_accpexp = []
+        for res in results:
+            for exp, acc in res.items():
+                if exp.startswith("Top1_Acc_Exp/"):
+                    curr_accpexp.append(float(acc))
+
+        # Get Local Eval Metrics from Avalanche
+        if self.evaluation is not None:
+            last_metrics = self.evaluation.get_last_metrics()
+            print("DEBUG: Available metrics keys:", list(last_metrics.keys()))  # Debug print
+        else:
+            last_metrics = {}
+            print("DEBUG: No evaluation object available for this strategy")
+        
+        # Handle different stream naming conventions
+        stream_suffix = "/eval_phase/test_stream"
+        if not any(key.endswith(stream_suffix) for key in last_metrics.keys()):
+            stream_suffix = "/eval_phase/test_datasets_stream"
+        
+        # confusion_matrix = last_metrics["ConfusionMatrix_Stream/eval_phase/test_stream"].tolist()  # Disabled for now
+        # Handle case where custom strategies (like FedWeIT) don't provide Avalanche-style metrics
+        stream_loss = last_metrics.get(f"Loss_Stream{stream_suffix}", 0.0)  # Default loss
+        stream_acc = last_metrics.get(f"Top1_Acc_Stream{stream_suffix}", 0.0)  # Default accuracy
+        # DiskUsage disabled to avoid permission errors
+        stream_disc_usage = last_metrics.get(f"DiskUsage_Stream{stream_suffix}", 0.0)
+
+        # Calculating Forgetting Measures
+        local_eval_metrics = self.client_state.config_records["local_eval_metrics"]
+        hist_accpexp = local_eval_metrics["accuracy_per_exp"]
+        round_fit = local_eval_metrics["rounds_selected"]
+
+        # Calculating Running Cumalative Forgetting Measure
+        cm_fmpexp = []
+        for i, e in enumerate(hist_accpexp):
+            e = json.loads(e)
+            # Handle case where indices don't match (e.g., custom strategies like FedWeIT)
+            if i < len(curr_accpexp) and i < len(e):
+                fm = e[i] - curr_accpexp[i]
+            else:
+                fm = 0.0  # Default forgetting measure when data is unavailable
+            cm_fmpexp.append(fm)
+
+        # Checking Cumalative Forgetting Measure
+        cprint("Check Cumalative FM", "blue")
+        cprint("History of Accuracy per Experience for this client")
+        print(json.dumps(hist_accpexp, indent=2))
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+        # print(f"Cumalative Forgetting Measure: {cmfm}")
+ 
+        # Calculate Running Stepwise Forgetting Measure
+        sw_fmpexp = []
+        if hist_accpexp:
+            prev_accpexp = json.loads(hist_accpexp[-1])
+        else:
+            prev_accpexp = []
+        for i, (prev_acc, curr_acc) in enumerate(zip(prev_accpexp, curr_accpexp)):
+            sw_fmpexp.append(prev_acc - curr_acc)
+        swfm = sum(sw_fmpexp)/NUM_EXP if sw_fmpexp else 0.0
+
+        # Checking Stepwise Forgetting Measure
+        cprint("Check StepWise FM", "blue")
+        print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+        print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
+        print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
+        print(f"StepWise Forgetting Measure: {swfm}")
+            
+        # Make Fit Metrics Dictionary
+        fit_dict_return = {
+                # "confusion_matrix": json.dumps(confusion_matrix),  # Disabled for now
+                # "cumalative_forgetting_measure":  float(cmfm),
+                "stepwise_forgetting_measure": float(swfm),
+                "stream_loss":  float(stream_loss),
+                "stream_acc":  float(stream_acc),
+                "stream_disc_usage":  float(stream_disc_usage),
+                "accuracy_per_experience": json.dumps(curr_accpexp),
+                "stepwise_forgetting_per_exp": json.dumps(sw_fmpexp),
+                "cumalative_forgetting_per_exp": json.dumps(cm_fmpexp),
+                "pid": self.partition_id,
+                "round": rnd,
+            }
+        cprint("Results After Fit")
+        print(json.dumps(fit_dict_return, indent=4))
+        cprint('done')
+
+        
+        # Logging Client State
+        print("Logging Client States")
+        if rnd != 0:
+            # Update the existing ConfigsRecord instead of replacing it with a dict
+            current_acc_exp = [json.dumps(curr_accpexp)]
+            current_stream_acc = [stream_acc]
+            current_stream_loss = [stream_loss]
+            current_swfm = [swfm]
+            
+            # Update existing metrics if they exist
+            if "accuracy_per_exp" in local_eval_metrics:
+                current_acc_exp.extend(local_eval_metrics["accuracy_per_exp"])
+            if "stream_accuracy" in local_eval_metrics:
+                current_stream_acc.extend(local_eval_metrics["stream_accuracy"])
+            if "stream_loss" in local_eval_metrics:
+                current_stream_loss.extend(local_eval_metrics["stream_loss"])
+            if "stepwise_forgetting_measure" in local_eval_metrics:
+                current_swfm.extend(local_eval_metrics["stepwise_forgetting_measure"])
+            
+            # Update the ConfigsRecord directly
+            local_eval_metrics["accuracy_per_exp"] = current_acc_exp
+            local_eval_metrics["stream_accuracy"] = current_stream_acc
+            local_eval_metrics["stream_loss"] = current_stream_loss
+            local_eval_metrics["stepwise_forgetting_measure"] = current_swfm
+
+        print("Finished Fit")
+        
+        # MEMORY CLEANUP - clear CUDA cache and run garbage collection
+        clear_memory()
+        print(f"Memory cleared after fit round {rnd}")
+        
+        # Client Failure Provision
+        if random.random() < cfg.client.falloff:
+            return None
+        else:
+            # Use the same cycling logic for experience length
+            experience_idx = ((rnd - 1) % len(self.trainlen_per_exp))
+            return get_parameters(self.cl_strategy.model), self.trainlen_per_exp[experience_idx], fit_dict_return
+
+    # Evaluate After Updating Global Model
+    def evaluate(self, parameters, config):
+        # Setting Global Model param
+        set_parameters(self.net, parameters)
+        rnd = config["server_round"]
+        num_rounds = config["num_rounds"]
+
+        # Creating a new CL Strategy for Evaluation
+        cl_strategy, evaluation = make_cl_strat(self.net)
+        
+        # Set client_id for FedWeIT strategy if needed
+        if hasattr(cl_strategy, 'current_client_id'):
+            cl_strategy.current_client_id = self.partition_id
+
+        # Distributed Client Evaluation
+        results = []
+        print(f"Local Client {self.partition_id} Evaluation on Updated Global Model")
+        
+        # Handle different benchmark types
+        if hasattr(self.benchmark, 'test_stream'):
+            test_stream = self.benchmark.test_stream
+        else:
+            test_stream = self.benchmark.test_datasets_stream
+        
+        results.append(cl_strategy.eval(test_stream))
+        if evaluation is not None:
+            last_metrics = evaluation.get_last_metrics()
+        else:
+            last_metrics = {}
+        
+        def find_metric_key(prefix, metrics_dict):
+            """Find the first key that starts with the given prefix."""
+            for key in metrics_dict.keys():
+                if key.startswith(prefix):
+                    return key
+            return None
+        
+        # Try to find loss and accuracy keys with different possible suffixes
+        loss_key = find_metric_key("Loss_Stream/eval_phase/test_stream", last_metrics)
+        if loss_key is None:
+            loss_key = find_metric_key("Loss_Stream/eval_phase/test_datasets_stream", last_metrics)
+        
+        acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_stream", last_metrics)
+        if acc_key is None:
+            acc_key = find_metric_key("Top1_Acc_Stream/eval_phase/test_datasets_stream", last_metrics)
+        
+        if loss_key is None or acc_key is None:
+            print("Available metric keys:", list(last_metrics.keys()))
+            print("Using default values for custom strategies (like FedWeIT) that don't provide Avalanche-style metrics")
+            # For custom strategies like FedWeIT, provide reasonable default values
+            stream_loss = 0.0  # Default loss
+            stream_acc = 0.0   # Default accuracy  
+        else:
+            stream_loss = last_metrics[loss_key]
+            stream_acc = last_metrics[acc_key]
+
+        # Getting Accuracy per Experience for client
+        curr_accpexp = []
+        for res in results:
+            for exp, acc in res.items():
+                if exp.startswith("Top1_Acc_Exp/"):
+                    curr_accpexp.append(float(acc))
+
+        print("Eval of Client: ")
+        print("Loss: ", stream_loss)
+        print("Acc: ", stream_acc)
+        print("Per Exp Acc: ", curr_accpexp)
+
+        eval_dict_return = {
+                "stream_accuracy": float(stream_acc),
+                "stream_loss": float(stream_loss),
+                "accuracy_per_experience": json.dumps(curr_accpexp),
+                "stepwise_forgetting_measure": 0.0,  # not calculated in eval
+                "cumalative_forgetting_measure": 0.0,  # not calculated in eval
+                "stepwise_forgetting_per_experience": json.dumps([]),  # not calculated in eval
+                "cumalative_forgetting_per_experience": json.dumps([]),  # not calculated in eval
+                "server_round": rnd,
+                "pid": self.partition_id,
+                }
 
 
 partition_strategies = initialize_partition_strategies(
