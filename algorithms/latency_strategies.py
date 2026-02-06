@@ -135,3 +135,6 @@ STRATEGY_REGISTRY = {
     "latencyawarefedavg": LatencyAwareFedAvg,
     "fedavg": LatencyAwareFedAvg,
 }
+
+# Async strategies are added dynamically to avoid circular imports
+# Use: from algorithms.async_fl import AsynchronousStrategy
