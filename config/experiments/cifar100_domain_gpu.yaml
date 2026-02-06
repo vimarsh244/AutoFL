@@ -16,7 +16,7 @@ model:
 
 cl:
   strategy: domain
-  num_experiences: 20
+  num_experiences: 10
 
 training:
   learning_rate: 0.001
@@ -24,19 +24,20 @@ training:
   batch_size: 64
 
 latency:
-  enabled: false
+  enabled: true
   sleep: false
+  sleep_log: true
   sampling_mode: chunk  # options: mean, trace, chunk, random
-  threshold_multiplier: 15000.0
+  threshold_multiplier: 13000.0
 
 server:
   num_rounds: 100
   num_clients: 10
-  fraction_fit: 1.0
+  fraction_fit: 0.1 # 1.0
   min_fit: 5
   min_eval: 5
-  #strategy: latency_aware_fedavg
-  strategy: fedavg
+  strategy: latency_aware_fedavg
+  #strategy: fedavg
 
 client:
   num_cpus: 12
@@ -45,4 +46,4 @@ client:
 
 wb:
   project: autofl-testing
-  name: f_cifar100_domain_resnet_no_latency_no_sleep_iid_exp20
+  name: f_cifar100_domain_resnet_latency(chunk)_logsleep(mul130)_iid_exp10
