@@ -2,7 +2,11 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset, as_avalanche_dataset
+from avalanche.benchmarks.utils import (
+    as_classification_dataset,
+    AvalancheDataset,
+    as_avalanche_dataset,
+)
 from avalanche.benchmarks.utils.data import make_avalanche_dataset
 
 import flwr
@@ -13,16 +17,20 @@ from pathlib import Path
 
 # Setup Config
 import sys
+
 sys.path.append(str(Path(__file__).parent.parent))
 from config_utils import load_config
 from workloads.partitioning import build_partitioner
+
 cfg = load_config()
 
 BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 
+
 class TupleDataset(torch.utils.data.Dataset):
     """Convert HuggingFace dataset format to tuple format for Avalanche"""
+
     def __init__(self, hf_dataset):
         self.dataset = hf_dataset
 
@@ -34,8 +42,10 @@ class TupleDataset(torch.utils.data.Dataset):
         # CIFAR100 from flwr_datasets uses 'fine_label' instead of 'label'
         return sample["img"], sample["fine_label"]
 
+
 # Cache FederatedDataset
 fds = None
+
 
 def load_datasets(partition_id: int):
     """Load partitioned CIFAR100"""
@@ -48,7 +58,7 @@ def load_datasets(partition_id: int):
             default_partition_by="fine_label",
         )
         fds = FederatedDataset(dataset="cifar100", partitioners={"train": partitioner})
-        
+
     partition = fds.load_partition(partition_id)
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
@@ -80,4 +90,4 @@ def load_datasets(partition_id: int):
     valloader = DataLoader(partition_train_test["test"], batch_size=BATCH_SIZE)
     testset = fds.load_split("test").with_transform(apply_transforms)
     testloader = DataLoader(testset, batch_size=BATCH_SIZE)
-    return train_CIFAR, test_CIFAR 
+    return train_CIFAR, test_CIFAR

@@ -34,6 +34,7 @@ from flwr.server.client_proxy import ClientProxy
 @dataclass
 class SimulatedClientConfig:
     """Configuration for simulated async client."""
+
     client_id: str
     model_fn: callable  # Function to create model
     train_loader: DataLoader
@@ -48,11 +49,11 @@ class SimulatedClientConfig:
 
 class SimulatedAsyncClient(ClientProxy):
     """Simulated client for async FL that trains locally.
-    
+
     This client simulates local training with configurable delays
     to mimic real-world async behavior.
     """
-    
+
     def __init__(self, config: SimulatedClientConfig):
         super().__init__(config.client_id)
         self.config = config
@@ -63,7 +64,7 @@ class SimulatedAsyncClient(ClientProxy):
         self.local_epochs = config.local_epochs
         self.learning_rate = config.learning_rate
         self._num_examples = len(config.train_loader.dataset)
-        
+
     def get_parameters(
         self, ins: GetParametersIns, timeout: Optional[float] = None
     ) -> GetParametersRes:
@@ -73,10 +74,11 @@ class SimulatedAsyncClient(ClientProxy):
             status=Status(code=Code.OK, message="Success"),
             parameters=ndarrays_to_parameters(params),
         )
-    
+
     def get_properties(self, ins, timeout: Optional[float] = None):
         """Get client properties."""
         from flwr.common import GetPropertiesRes
+
         return GetPropertiesRes(
             status=Status(code=Code.OK, message="Success"),
             properties={
@@ -84,34 +86,30 @@ class SimulatedAsyncClient(ClientProxy):
                 "num_examples": self._num_examples,
             },
         )
-    
-    def fit(
-        self, ins: FitIns, timeout: Optional[float] = None
-    ) -> FitRes:
+
+    def fit(self, ins: FitIns, timeout: Optional[float] = None) -> FitRes:
         """Train the model on local data."""
         start_time = time.time()
-        
+
         # Simulate network delay (download)
         if self.config.simulate_delay:
             download_delay = random.uniform(
                 self.config.min_delay / 2, self.config.max_delay / 2
             )
             time.sleep(download_delay)
-        
+
         # Set parameters from server
         params = parameters_to_ndarrays(ins.parameters)
         state_dict = self.model.state_dict()
         for key, param in zip(state_dict.keys(), params):
             state_dict[key] = torch.tensor(param)
         self.model.load_state_dict(state_dict)
-        
+
         # Train locally
         self.model.train()
-        optimizer = torch.optim.SGD(
-            self.model.parameters(), lr=self.learning_rate
-        )
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
         criterion = torch.nn.CrossEntropyLoss()
-        
+
         total_loss = 0.0
         num_batches = 0
         for epoch in range(self.local_epochs):
@@ -123,30 +121,30 @@ class SimulatedAsyncClient(ClientProxy):
                     images, labels = batch[0].to(self.device), batch[1].to(self.device)
                 else:
                     continue
-                    
+
                 optimizer.zero_grad()
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
-                
+
                 total_loss += loss.item()
                 num_batches += 1
-        
+
         avg_loss = total_loss / max(num_batches, 1)
-        
+
         # Simulate network delay (upload)
         if self.config.simulate_delay:
             upload_delay = random.uniform(
                 self.config.min_delay / 2, self.config.max_delay / 2
             )
             time.sleep(upload_delay)
-        
+
         # Get updated parameters
         new_params = [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-        
+
         elapsed = time.time() - start_time
-        
+
         return FitRes(
             status=Status(code=Code.OK, message="Success"),
             parameters=ndarrays_to_parameters(new_params),
@@ -158,7 +156,7 @@ class SimulatedAsyncClient(ClientProxy):
                 "client_id": self.cid,
             },
         )
-    
+
     def evaluate(
         self, ins: EvaluateIns, timeout: Optional[float] = None
     ) -> EvaluateRes:
@@ -169,15 +167,15 @@ class SimulatedAsyncClient(ClientProxy):
         for key, param in zip(state_dict.keys(), params):
             state_dict[key] = torch.tensor(param)
         self.model.load_state_dict(state_dict)
-        
+
         # Evaluate
         self.model.eval()
         criterion = torch.nn.CrossEntropyLoss()
-        
+
         total_loss = 0.0
         correct = 0
         total = 0
-        
+
         with torch.no_grad():
             for batch in self.test_loader:
                 if isinstance(batch, dict):
@@ -187,28 +185,29 @@ class SimulatedAsyncClient(ClientProxy):
                     images, labels = batch[0].to(self.device), batch[1].to(self.device)
                 else:
                     continue
-                
+
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
                 total_loss += loss.item() * labels.size(0)
-                
+
                 _, predicted = outputs.max(1)
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
-        
+
         avg_loss = total_loss / max(total, 1)
         accuracy = correct / max(total, 1)
-        
+
         return EvaluateRes(
             status=Status(code=Code.OK, message="Success"),
             loss=avg_loss,
             num_examples=total,
             metrics={"accuracy": accuracy},
         )
-    
+
     def reconnect(self, ins, timeout=None):
         """Handle reconnection request."""
         from flwr.common import DisconnectRes
+
         return DisconnectRes(reason="")
 
 
@@ -225,7 +224,7 @@ def create_simulated_clients(
     max_delay: float = 3.0,
 ) -> List[SimulatedAsyncClient]:
     """Create a list of simulated async clients.
-    
+
     Args:
         num_clients: Number of clients to create
         model_fn: Function that returns a new model instance
@@ -237,7 +236,7 @@ def create_simulated_clients(
         simulate_delay: Whether to simulate network delays
         min_delay: Minimum simulated delay in seconds
         max_delay: Maximum simulated delay in seconds
-    
+
     Returns:
         List of SimulatedAsyncClient instances
     """

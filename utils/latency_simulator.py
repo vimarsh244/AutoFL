@@ -110,7 +110,11 @@ def build_dataframe(
         skiprows=1,
     )
 
-    rename_map = {f"col_{idx}": index_to_name[idx] for idx in sorted_usecols if idx in index_to_name}
+    rename_map = {
+        f"col_{idx}": index_to_name[idx]
+        for idx in sorted_usecols
+        if idx in index_to_name
+    }
     df.rename(columns=rename_map, inplace=True)
     return df, index_to_name, index_to_metric
 
@@ -191,28 +195,44 @@ class LatencySimulator:
         self.enabled: bool = bool(latency_cfg.get("enabled", False))
         self.sampling_mode: str = str(latency_cfg.get("sampling_mode", "mean")).lower()
         self.scaling_factor: float = float(latency_cfg.get("scaling_factor", 1.0))
-        self.threshold_multiplier: float = float(latency_cfg.get("threshold_multiplier", 1.0))
+        self.threshold_multiplier: float = float(
+            latency_cfg.get("threshold_multiplier", 1.0)
+        )
         self.drop_behavior: str = str(latency_cfg.get("drop_behavior", "skip")).lower()
         configured_sleep = bool(latency_cfg.get("sleep", False))
         self.sleep_log: bool = bool(latency_cfg.get("sleep_log", configured_sleep))
         self.random_seed: int = int(latency_cfg.get("random_seed", 42))
         self.max_clients: int = int(latency_cfg.get("max_clients", 10))
-        self.throughput_floor_kbps: float = float(latency_cfg.get("throughput_floor_kbps", 10.0))
+        self.throughput_floor_kbps: float = float(
+            latency_cfg.get("throughput_floor_kbps", 10.0)
+        )
         self.upload_multiplier: float = float(latency_cfg.get("upload_multiplier", 1.0))
-        self.download_multiplier: float = float(latency_cfg.get("download_multiplier", 1.0))
+        self.download_multiplier: float = float(
+            latency_cfg.get("download_multiplier", 1.0)
+        )
         csv_path = latency_cfg.get("csv_path", "")
         self.csv_path = Path(csv_path) if csv_path else None
         server_cfg = cfg.get("server", {}) or {}
-        self.total_rounds = int(server_cfg.get("num_rounds", 1)) if server_cfg is not None else 1
-        self.skip_if_slow_aggregation: bool = bool(latency_cfg.get("skip_if_slow_aggregation", False))
-        self.skip_if_slow_margin: float = float(latency_cfg.get("skip_if_slow_margin", 1.0))
-        self.log_round_time_variance: bool = bool(latency_cfg.get("log_round_time_variance", False))
+        self.total_rounds = (
+            int(server_cfg.get("num_rounds", 1)) if server_cfg is not None else 1
+        )
+        self.skip_if_slow_aggregation: bool = bool(
+            latency_cfg.get("skip_if_slow_aggregation", False)
+        )
+        self.skip_if_slow_margin: float = float(
+            latency_cfg.get("skip_if_slow_margin", 1.0)
+        )
+        self.log_round_time_variance: bool = bool(
+            latency_cfg.get("log_round_time_variance", False)
+        )
 
         self._rng = np.random.default_rng(self.random_seed)
         self._stats: Dict[int, ClientLatencyStats] = {}
         if self.enabled:
             if not self.csv_path:
-                raise ValueError("latency.enabled is True but latency.csv_path is not set")
+                raise ValueError(
+                    "latency.enabled is True but latency.csv_path is not set"
+                )
             if not self.csv_path.exists():
                 raise FileNotFoundError(f"Latency CSV not found: {self.csv_path}")
             self._load_metrics()
@@ -225,8 +245,12 @@ class LatencySimulator:
             raise RuntimeError("Failed to extract latency metrics from CSV")
 
         frame_df = build_long_form(data, "frame_delay", metric_map["frame_delay"])
-        generated_df = build_long_form(data, "generated_throughput", metric_map["generated_throughput"])
-        received_df = build_long_form(data, "received_throughput", metric_map["received_throughput"])
+        generated_df = build_long_form(
+            data, "generated_throughput", metric_map["generated_throughput"]
+        )
+        received_df = build_long_form(
+            data, "received_throughput", metric_map["received_throughput"]
+        )
 
         # Convert generated throughput from kBytes/s to kbits/s if not already scaled.
         # analyze_latency multiplies generated throughput by scale when plotting; reproduce here.
@@ -238,8 +262,12 @@ class LatencySimulator:
             delay_trace = self._extract_trace(frame_df, client_id)
             if delay_trace is None:
                 continue
-            generated_trace = self._extract_trace(generated_df, client_id, allow_empty=True)
-            received_trace = self._extract_trace(received_df, client_id, allow_empty=True)
+            generated_trace = self._extract_trace(
+                generated_df, client_id, allow_empty=True
+            )
+            received_trace = self._extract_trace(
+                received_df, client_id, allow_empty=True
+            )
 
             mean_delay_s = float(np.mean(delay_trace)) if delay_trace.size else 0.0
             std_delay_s = float(np.std(delay_trace)) if delay_trace.size else 0.0
@@ -252,8 +280,12 @@ class LatencySimulator:
                 mean_delay_s=mean_delay_s,
                 std_delay_s=std_delay_s,
                 delay_trace=delay_trace,
-                generated_trace=generated_trace if generated_trace is not None else np.array([]),
-                received_trace=received_trace if received_trace is not None else np.array([]),
+                generated_trace=(
+                    generated_trace if generated_trace is not None else np.array([])
+                ),
+                received_trace=(
+                    received_trace if received_trace is not None else np.array([])
+                ),
                 generated_mean_kbps=gen_mean,
                 received_mean_kbps=rec_mean,
                 delay_chunk_means=delay_chunk_means,
@@ -261,7 +293,9 @@ class LatencySimulator:
             self._stats[client_id] = stats
 
     @staticmethod
-    def _extract_trace(df: pd.DataFrame, client_id: int, allow_empty: bool = False) -> Optional[np.ndarray]:
+    def _extract_trace(
+        df: pd.DataFrame, client_id: int, allow_empty: bool = False
+    ) -> Optional[np.ndarray]:
         if df.empty:
             return np.array([]) if allow_empty else None
         subset = df[df["car_id"] == client_id]
@@ -294,7 +328,9 @@ class LatencySimulator:
     def has_client(self, client_id: int) -> bool:
         return client_id in self._stats
 
-    def sample(self, client_id: int, round_idx: int, payload_bytes: int) -> ClientLatencySample:
+    def sample(
+        self, client_id: int, round_idx: int, payload_bytes: int
+    ) -> ClientLatencySample:
         if not self.enabled or client_id not in self._stats:
             return ClientLatencySample(
                 base_delay_s=0.0,
@@ -309,22 +345,31 @@ class LatencySimulator:
         base_delay_s = self._sample_delay(stats, round_idx)
         download_time_s = self._compute_transfer_time(
             payload_bytes,
-            rate_kbps=self._sample_throughput(stats.received_trace, stats.received_mean_kbps, round_idx),
+            rate_kbps=self._sample_throughput(
+                stats.received_trace, stats.received_mean_kbps, round_idx
+            ),
             multiplier=self.download_multiplier,
         )
         upload_time_s = self._compute_transfer_time(
             payload_bytes,
-            rate_kbps=self._sample_throughput(stats.generated_trace, stats.generated_mean_kbps, round_idx),
+            rate_kbps=self._sample_throughput(
+                stats.generated_trace, stats.generated_mean_kbps, round_idx
+            ),
             multiplier=self.upload_multiplier,
         )
 
-        total_network_time_s = self.scaling_factor * (base_delay_s + download_time_s + upload_time_s)
+        total_network_time_s = self.scaling_factor * (
+            base_delay_s + download_time_s + upload_time_s
+        )
 
         threshold_s = self.scaling_factor * (
-            stats.mean_delay_s * self.threshold_multiplier + (self.threshold_multiplier * self._safe_value(stats.std_delay_s))
+            stats.mean_delay_s * self.threshold_multiplier
+            + (self.threshold_multiplier * self._safe_value(stats.std_delay_s))
         )
         # TODO: modified this here temperorily for even mean to be higher
-        exceeded = total_network_time_s > threshold_s if math.isfinite(threshold_s) else False
+        exceeded = (
+            total_network_time_s > threshold_s if math.isfinite(threshold_s) else False
+        )
 
         sample = ClientLatencySample(
             base_delay_s=base_delay_s * self.scaling_factor,
@@ -355,7 +400,11 @@ class LatencySimulator:
             index = round_idx % stats.delay_trace.size
             return float(stats.delay_trace[index])
         if self.sampling_mode == "random":
-            return float(self._rng.choice(stats.delay_trace)) if stats.delay_trace.size else self._safe_value(stats.mean_delay_s)
+            return (
+                float(self._rng.choice(stats.delay_trace))
+                if stats.delay_trace.size
+                else self._safe_value(stats.mean_delay_s)
+            )
         raise ValueError(f"Unsupported latency.sampling_mode: {self.sampling_mode}")
 
     def _sample_throughput(
@@ -374,7 +423,9 @@ class LatencySimulator:
             candidate = float(self._rng.choice(trace))
         return max(candidate, self.throughput_floor_kbps)
 
-    def _compute_transfer_time(self, payload_bytes: int, rate_kbps: float, multiplier: float) -> float:
+    def _compute_transfer_time(
+        self, payload_bytes: int, rate_kbps: float, multiplier: float
+    ) -> float:
         if payload_bytes <= 0:
             return 0.0
         bits = payload_bytes * 8.0
@@ -407,6 +458,7 @@ class LatencySimulator:
 # Runtime metric capture helpers
 # ----------------------------------------------------------------------
 
+
 @dataclass
 class ClientRoundRecord:
     round_id: int
@@ -435,7 +487,9 @@ class ServerRoundRecord:
 class RuntimeMetricsRecorder:
     """Collect latency/timing metrics for persistence and plotting."""
 
-    def __init__(self, output_dir: Path, save_client: bool = True, save_server: bool = True) -> None:
+    def __init__(
+        self, output_dir: Path, save_client: bool = True, save_server: bool = True
+    ) -> None:
         self.output_dir = output_dir
         self.save_client = save_client
         self.save_server = save_server
@@ -461,7 +515,9 @@ class RuntimeMetricsRecorder:
                 client_id=client_id,
                 num_examples=num_examples,
                 metrics=metrics,
-                dropped=bool(metrics.get("latency/dropped", False) or client_id in dropped_set),
+                dropped=bool(
+                    metrics.get("latency/dropped", False) or client_id in dropped_set
+                ),
             )
             self._client_records.append(record)
         # Record explicit dropouts (clients filtered before metrics aggregation)
@@ -508,7 +564,9 @@ class RuntimeMetricsRecorder:
         )
         self._server_records.append(record)
 
-    def log_aggregate_metrics(self, round_id: int, phase: str, metrics: Mapping[str, object]) -> None:
+    def log_aggregate_metrics(
+        self, round_id: int, phase: str, metrics: Mapping[str, object]
+    ) -> None:
         row: Dict[str, object] = {"round": round_id, "phase": phase}
         for key, value in metrics.items():
             if isinstance(value, (dict, list, tuple)):
@@ -547,7 +605,9 @@ class RuntimeMetricsRecorder:
                             "aggregation_latency_component_s": record.aggregation_latency_component_s,
                             "total_results": record.total_results,
                             "accepted_results": record.accepted_results,
-                            "dropped_clients": ",".join(map(str, record.dropped_clients)),
+                            "dropped_clients": ",".join(
+                                map(str, record.dropped_clients)
+                            ),
                             "expected_mean_network_time_s": record.expected_mean_network_time_s,
                             "expected_max_network_time_s": record.expected_max_network_time_s,
                             "skipped_due_to_latency": record.skipped_due_to_latency,
@@ -576,7 +636,9 @@ def init_runtime_recorder(cfg: DictConfig) -> RuntimeMetricsRecorder:
     output_dir = Path(cfg.get("logging", {}).get("run_output_dir", output_root))
     save_client = bool(logging_cfg.get("save_client_metrics", True))
     save_server = bool(logging_cfg.get("save_server_metrics", True))
-    recorder = RuntimeMetricsRecorder(output_dir=output_dir, save_client=save_client, save_server=save_server)
+    recorder = RuntimeMetricsRecorder(
+        output_dir=output_dir, save_client=save_client, save_server=save_server
+    )
     _GLOBAL_RECORDER = recorder
     return recorder
 

@@ -32,9 +32,10 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import seaborn as sns  # noqa: E402
 
-
 MAX_DEFAULT_CLIENTS = 10
-GENERATED_THROUGHPUT_SCALE = 8.0  # Convert kBytes/s -> kbits/s so it matches server stats
+GENERATED_THROUGHPUT_SCALE = (
+    8.0  # Convert kBytes/s -> kbits/s so it matches server stats
+)
 
 
 @dataclass(frozen=True)
@@ -141,7 +142,11 @@ def build_dataframe(
     )
 
     # Rename the subset to meaningful labels.
-    rename_map = {f"col_{idx}": index_to_name[idx] for idx in sorted_usecols if idx in index_to_name}
+    rename_map = {
+        f"col_{idx}": index_to_name[idx]
+        for idx in sorted_usecols
+        if idx in index_to_name
+    }
     df.rename(columns=rename_map, inplace=True)
     return df, index_to_name, index_to_metric
 
@@ -173,7 +178,9 @@ def build_long_form(
     return result
 
 
-def compute_frame_delay_stats(frame_delay: pd.DataFrame, serving_cell: pd.DataFrame) -> pd.DataFrame:
+def compute_frame_delay_stats(
+    frame_delay: pd.DataFrame, serving_cell: pd.DataFrame
+) -> pd.DataFrame:
     if frame_delay.empty:
         return pd.DataFrame()
 
@@ -220,7 +227,7 @@ def plot_frame_delay_series(frame_delay: pd.DataFrame, output_path: Path) -> Non
             linewidth=1.2,
             alpha=0.8,
         )
-    
+
     # only doing for the first car to avoid clutter
     # if "car_id" in frame_delay.columns:
     #     first_car_id = frame_delay["car_id"].min()
@@ -283,7 +290,9 @@ def plot_frame_delay_summary(stats: pd.DataFrame, output_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_serving_cell_transitions(serving_cell: pd.DataFrame, output_path: Path) -> None:
+def plot_serving_cell_transitions(
+    serving_cell: pd.DataFrame, output_path: Path
+) -> None:
     if serving_cell.empty:
         return
 
@@ -301,7 +310,9 @@ def plot_serving_cell_transitions(serving_cell: pd.DataFrame, output_path: Path)
         subset = downsample(group, max_points=1500)
 
         if subset.empty:
-            ax.text(0.5, 0.5, "No samples", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5, 0.5, "No samples", ha="center", va="center", transform=ax.transAxes
+            )
         else:
             values = subset["value"].to_numpy()
             times = subset["time"].to_numpy()
@@ -312,9 +323,19 @@ def plot_serving_cell_transitions(serving_cell: pd.DataFrame, output_path: Path)
                 if math.isclose(xmax, xmin):
                     xmin -= 0.5
                     xmax += 0.5
-                ax.hlines(constant, xmin=xmin, xmax=xmax, colors="#1f77b4", linewidth=1.4)
+                ax.hlines(
+                    constant, xmin=xmin, xmax=xmax, colors="#1f77b4", linewidth=1.4
+                )
                 ax.scatter(times, values, s=28, color="#1f77b4", alpha=0.8, zorder=3)
-                ax.text(0.5, 0.1, "No transitions", ha="center", va="center", transform=ax.transAxes, fontsize="small")
+                ax.text(
+                    0.5,
+                    0.1,
+                    "No transitions",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                    fontsize="small",
+                )
                 ax.set_xlim(xmin, xmax)
             else:
                 ax.step(subset["time"], subset["value"], where="post", linewidth=1.3)
@@ -331,7 +352,11 @@ def plot_serving_cell_transitions(serving_cell: pd.DataFrame, output_path: Path)
     plt.close(fig)
 
 
-def plot_throughput(throughput_generated: pd.DataFrame, throughput_received: pd.DataFrame, output_path: Path) -> None:
+def plot_throughput(
+    throughput_generated: pd.DataFrame,
+    throughput_received: pd.DataFrame,
+    output_path: Path,
+) -> None:
     if throughput_generated.empty and throughput_received.empty:
         return
 
@@ -379,7 +404,10 @@ def plot_avg_throughput_per_car(
     output_path: Path,
 ) -> None:
     frames: List[pd.DataFrame] = []
-    for label, df in (("Generated", throughput_generated), ("Received", throughput_received)):
+    for label, df in (
+        ("Generated", throughput_generated),
+        ("Received", throughput_received),
+    ):
         if df.empty:
             continue
         rows: List[Dict[str, float]] = []
@@ -418,12 +446,18 @@ def run_analysis(input_path: Path, output_dir: Path, max_clients: int) -> None:
     data, _, _ = build_dataframe(input_path, total_cols, metric_map)
 
     if data.empty:
-        raise RuntimeError("No metrics were loaded; check that the CSV contains the expected signals.")
+        raise RuntimeError(
+            "No metrics were loaded; check that the CSV contains the expected signals."
+        )
 
     frame_delay = build_long_form(data, "frame_delay", metric_map["frame_delay"])
     serving_cell = build_long_form(data, "serving_cell", metric_map["serving_cell"])
-    generated_tp = build_long_form(data, "generated_throughput", metric_map["generated_throughput"])
-    received_tp = build_long_form(data, "received_throughput", metric_map["received_throughput"])
+    generated_tp = build_long_form(
+        data, "generated_throughput", metric_map["generated_throughput"]
+    )
+    received_tp = build_long_form(
+        data, "received_throughput", metric_map["received_throughput"]
+    )
 
     if not generated_tp.empty:
         generated_tp = generated_tp.copy()
@@ -435,7 +469,9 @@ def run_analysis(input_path: Path, output_dir: Path, max_clients: int) -> None:
 
     plot_frame_delay_series(frame_delay, output_dir / "voip_frame_delay_timeseries.png")
     plot_frame_delay_summary(summary, output_dir / "voip_frame_delay_summary.png")
-    plot_serving_cell_transitions(serving_cell, output_dir / "serving_cell_transitions.png")
+    plot_serving_cell_transitions(
+        serving_cell, output_dir / "serving_cell_transitions.png"
+    )
     plot_throughput(generated_tp, received_tp, output_dir / "voip_throughput_total.png")
     plot_avg_throughput_per_car(
         generated_tp,
@@ -452,7 +488,9 @@ def run_analysis(input_path: Path, output_dir: Path, max_clients: int) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Analyse OMNeT++ VoIP latency exports.")
+    parser = argparse.ArgumentParser(
+        description="Analyse OMNeT++ VoIP latency exports."
+    )
     parser.add_argument(
         "--input",
         type=Path,

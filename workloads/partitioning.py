@@ -36,9 +36,8 @@ def build_partitioner(
     split_mode = str(_select(cfg, "dataset.split", "iid")).strip().lower()
 
     if split_mode == "niid":
-        partition_by = (
-            partition_by_override
-            or _select(cfg, "dataset.niid.partition_by", default_partition_by)
+        partition_by = partition_by_override or _select(
+            cfg, "dataset.niid.partition_by", default_partition_by
         )
         alpha = float(_select(cfg, "dataset.niid.alpha", 0.5))
         seed = int(_select(cfg, "dataset.niid.seed", 42))

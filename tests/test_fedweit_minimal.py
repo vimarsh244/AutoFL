@@ -23,6 +23,7 @@ batch_size = 8
 num_batches = 5
 num_epochs = 2
 
+
 # create random data loaders for each client
 def make_random_loader():
     data = []
@@ -32,23 +33,30 @@ def make_random_loader():
         data.append((x, y))
     return data
 
+
 client_loaders = [make_random_loader() for _ in range(num_clients)]
 test_loader = make_random_loader()
 
 # create model and fedweit strategy
 net = Net()
-fedweit = FedWeITStrategy(net, sparsity=0.5, num_clients=num_clients, device='cpu')
+fedweit = FedWeITStrategy(net, sparsity=0.5, num_clients=num_clients, device="cpu")
 
-print("="*50)
+print("=" * 50)
 print("testing FedWeITStrategy minimal workflow")
-print("="*50)
+print("=" * 50)
 
 try:
     # local training for each client on a single task (task_id=0)
     client_updates = []
     for client_id in range(num_clients):
         print(f"training client {client_id} on task 0...")
-        update = fedweit.train_task(client_loaders[client_id], task_id=0, client_id=client_id, epochs=num_epochs, lr=1e-2)
+        update = fedweit.train_task(
+            client_loaders[client_id],
+            task_id=0,
+            client_id=client_id,
+            epochs=num_epochs,
+            lr=1e-2,
+        )
         client_updates.append(update)
     print("local training completed for all clients.")
 
@@ -66,4 +74,5 @@ try:
 except Exception as e:
     print(f"FedWeIT minimal test failed: {e}")
     import traceback
-    traceback.print_exc() 
+
+    traceback.print_exc()

@@ -13,8 +13,16 @@ from torch import nn
 from typing import Any, Dict, List, Optional
 import copy
 
+
 class FedETStrategy:
-    def __init__(self, model: nn.Module, et_config: Dict[str, Any], num_clients: int = 2, num_tasks: int = 5, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        et_config: Dict[str, Any],
+        num_clients: int = 2,
+        num_tasks: int = 5,
+        **kwargs,
+    ):
         """
         Args:
             model: PyTorch model to be used for federated continual learning.
@@ -28,25 +36,30 @@ class FedETStrategy:
         self.num_clients = num_clients
         self.num_tasks = num_tasks
         # initialize prompt pool and classifier head pool for each client
-        self.client_prompt_pools = [self._init_prompt_pool() for _ in range(num_clients)]
+        self.client_prompt_pools = [
+            self._init_prompt_pool() for _ in range(num_clients)
+        ]
         self.client_head_pools = [self._init_head_pool() for _ in range(num_clients)]
         # track which prompts/heads are frozen (per client, per task)
-        self.frozen_prompts = [[False]*num_tasks for _ in range(num_clients)]
-        self.frozen_heads = [[False]*num_tasks for _ in range(num_clients)]
+        self.frozen_prompts = [[False] * num_tasks for _ in range(num_clients)]
+        self.frozen_heads = [[False] * num_tasks for _ in range(num_clients)]
         # store global prompt/head pools (for aggregation)
         self.global_prompt_pool = self._init_prompt_pool()
         self.global_head_pool = self._init_head_pool()
 
     def _init_prompt_pool(self):
         # initialize a prompt pool (one prompt per task)
-        prompt_len = self.et_config.get('prompt_length', 10)
-        prompt_dim = self.et_config.get('prompt_dim', 128)
-        return [nn.Parameter(torch.randn(prompt_len, prompt_dim)) for _ in range(self.num_tasks)]
+        prompt_len = self.et_config.get("prompt_length", 10)
+        prompt_dim = self.et_config.get("prompt_dim", 128)
+        return [
+            nn.Parameter(torch.randn(prompt_len, prompt_dim))
+            for _ in range(self.num_tasks)
+        ]
 
     def _init_head_pool(self):
         # initialize a classifier head pool (one head per task)
-        num_classes = self.et_config.get('num_classes', 10)
-        head_dim = self.et_config.get('head_dim', 128)
+        num_classes = self.et_config.get("num_classes", 10)
+        head_dim = self.et_config.get("head_dim", 128)
         return [nn.Linear(head_dim, num_classes) for _ in range(self.num_tasks)]
 
     def get_prompt_params(self, client_id: int):
@@ -60,7 +73,9 @@ class FedETStrategy:
 
     def get_head_params(self, client_id: int):
         # extract the current head pool for a client
-        return [copy.deepcopy(h.state_dict()) for h in self.client_head_pools[client_id]]
+        return [
+            copy.deepcopy(h.state_dict()) for h in self.client_head_pools[client_id]
+        ]
 
     def set_head_params(self, head_params: List[Dict[str, Any]], client_id: int):
         # set the head pool for a client
@@ -79,14 +94,20 @@ class FedETStrategy:
         prompt = self.client_prompt_pools[client_id][task_id]
         return self.model(x, prompt=prompt)
 
-    def aggregate(self, client_prompt_pools: List[List[torch.Tensor]], client_head_pools: List[List[Dict[str, Any]]]):
+    def aggregate(
+        self,
+        client_prompt_pools: List[List[torch.Tensor]],
+        client_head_pools: List[List[Dict[str, Any]]],
+    ):
         # aggregate client prompt/head pools (FedAvg)
         # For each task, average prompts and heads across clients
         agg_prompt_pool = []
         agg_head_pool = []
         for t in range(self.num_tasks):
             # aggregate prompts
-            stacked_prompts = torch.stack([cpp[t] for cpp in client_prompt_pools], dim=0)
+            stacked_prompts = torch.stack(
+                [cpp[t] for cpp in client_prompt_pools], dim=0
+            )
             agg_prompt = torch.mean(stacked_prompts, dim=0)
             agg_prompt_pool.append(agg_prompt)
             # aggregate heads (average weights)
@@ -94,7 +115,9 @@ class FedETStrategy:
             head_state_dicts = [chp[t] for chp in client_head_pools]
             avg_state_dict = {}
             for key in head_state_dicts[0].keys():
-                avg_state_dict[key] = sum([hsd[key] for hsd in head_state_dicts]) / len(head_state_dicts)
+                avg_state_dict[key] = sum([hsd[key] for hsd in head_state_dicts]) / len(
+                    head_state_dicts
+                )
             agg_head = copy.deepcopy(self.client_head_pools[0][t])
             agg_head.load_state_dict(avg_state_dict)
             agg_head_pool.append(agg_head)

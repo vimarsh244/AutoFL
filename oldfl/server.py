@@ -12,6 +12,7 @@ strategy = FedAvg(
     min_available_clients=5,  # Wait until all 10 clients are available
 )
 
+
 def server_fn(context: Context) -> ServerAppComponents:
     """Construct components that set the ServerApp behaviour.
 
@@ -24,5 +25,3 @@ def server_fn(context: Context) -> ServerAppComponents:
     config = ServerConfig(num_rounds=5)
 
     return ServerAppComponents(strategy=strategy, config=config)
-
-

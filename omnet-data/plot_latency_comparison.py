@@ -27,7 +27,9 @@ def load_run_metrics(path: Path, name: str) -> RunMetrics:
     server_path = path / "server_round_metrics.csv"
     missing = [p.name for p in (aggregate_path, server_path) if not p.exists()]
     if missing:
-        raise FileNotFoundError(f"Missing expected files in {path}: {', '.join(missing)}")
+        raise FileNotFoundError(
+            f"Missing expected files in {path}: {', '.join(missing)}"
+        )
 
     aggregate = pd.read_csv(aggregate_path)
     server = pd.read_csv(server_path)
@@ -49,7 +51,9 @@ def prepare_accuracy_dataframe(runs: Dict[str, RunMetrics]) -> pd.DataFrame:
         )
         frames.append(subset)
     if not frames:
-        raise RuntimeError("No evaluation accuracy metrics found. Ensure aggregate_metrics.csv contains eval rows.")
+        raise RuntimeError(
+            "No evaluation accuracy metrics found. Ensure aggregate_metrics.csv contains eval rows."
+        )
     return pd.concat(frames, ignore_index=True)
 
 
@@ -59,13 +63,15 @@ def prepare_client_timing_dataframe(runs: Dict[str, RunMetrics]) -> pd.DataFrame
         fit_df = metrics.aggregate[metrics.aggregate["phase"] == "fit"].copy()
         if "local/average/round_time_s" not in fit_df.columns:
             continue
-        subset = fit_df[[
-            "round",
-            "local/average/round_time_s",
-            "local/average/network_time_s",
-            "local/average/training_time_s",
-            "run",
-        ]]
+        subset = fit_df[
+            [
+                "round",
+                "local/average/round_time_s",
+                "local/average/network_time_s",
+                "local/average/training_time_s",
+                "run",
+            ]
+        ]
         subset.rename(
             columns={
                 "local/average/round_time_s": "round_time_s",
@@ -100,15 +106,26 @@ def plot_accuracy(df: pd.DataFrame, output: Path) -> None:
     plt.close()
 
 
-def plot_runtime(client_df: pd.DataFrame, server_df: pd.DataFrame, output: Path) -> None:
+def plot_runtime(
+    client_df: pd.DataFrame, server_df: pd.DataFrame, output: Path
+) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharex=True)
 
-    sns.lineplot(data=server_df, x="round", y="aggregation_time_s", hue="run", marker="o", ax=axes[0])
+    sns.lineplot(
+        data=server_df,
+        x="round",
+        y="aggregation_time_s",
+        hue="run",
+        marker="o",
+        ax=axes[0],
+    )
     axes[0].set_title("Server Aggregation Time")
     axes[0].set_xlabel("Round")
     axes[0].set_ylabel("Time [s]")
 
-    sns.lineplot(data=client_df, x="round", y="round_time_s", hue="run", marker="o", ax=axes[1])
+    sns.lineplot(
+        data=client_df, x="round", y="round_time_s", hue="run", marker="o", ax=axes[1]
+    )
     axes[1].set_title("Average Client Round Time")
     axes[1].set_xlabel("Round")
     axes[1].set_ylabel("Time [s]")
@@ -130,8 +147,16 @@ def write_summary(runs: Dict[str, RunMetrics], output: Path) -> None:
         fit_df = metrics.aggregate[metrics.aggregate["phase"] == "fit"]
         row = {
             "run": name,
-            "eval_accuracy_mean": eval_df["global/average/accuracy"].mean() if "global/average/accuracy" in eval_df else float("nan"),
-            "fit_round_time_mean": fit_df["local/average/round_time_s"].mean() if "local/average/round_time_s" in fit_df else float("nan"),
+            "eval_accuracy_mean": (
+                eval_df["global/average/accuracy"].mean()
+                if "global/average/accuracy" in eval_df
+                else float("nan")
+            ),
+            "fit_round_time_mean": (
+                fit_df["local/average/round_time_s"].mean()
+                if "local/average/round_time_s" in fit_df
+                else float("nan")
+            ),
             "server_aggregation_time_mean": metrics.server["aggregation_time_s"].mean(),
             "drop_rate": _estimate_drop_rate(metrics.server),
         }
@@ -156,12 +181,36 @@ def _estimate_drop_rate(server_df: pd.DataFrame) -> float:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compare baseline and latency-aware AutoFL runs")
-    parser.add_argument("--baseline", type=Path, required=True, help="Path to baseline run output directory")
-    parser.add_argument("--latency", type=Path, required=True, help="Path to latency-injected run output directory")
-    parser.add_argument("--output", type=Path, help="Directory to write comparison artefacts")
-    parser.add_argument("--baseline-name", type=str, default="Baseline", help="Display name for the baseline run")
-    parser.add_argument("--latency-name", type=str, default="Latency Injected", help="Display name for the latency run")
+    parser = argparse.ArgumentParser(
+        description="Compare baseline and latency-aware AutoFL runs"
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        required=True,
+        help="Path to baseline run output directory",
+    )
+    parser.add_argument(
+        "--latency",
+        type=Path,
+        required=True,
+        help="Path to latency-injected run output directory",
+    )
+    parser.add_argument(
+        "--output", type=Path, help="Directory to write comparison artefacts"
+    )
+    parser.add_argument(
+        "--baseline-name",
+        type=str,
+        default="Baseline",
+        help="Display name for the baseline run",
+    )
+    parser.add_argument(
+        "--latency-name",
+        type=str,
+        default="Latency Injected",
+        help="Display name for the latency run",
+    )
     return parser.parse_args()
 
 

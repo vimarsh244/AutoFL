@@ -12,8 +12,15 @@ from torch import nn
 from typing import Any, Dict, List, Optional
 import copy
 
+
 class FedProtoStrategy:
-    def __init__(self, model: nn.Module, proto_config: Dict[str, Any], num_clients: int = 2, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        proto_config: Dict[str, Any],
+        num_clients: int = 2,
+        **kwargs,
+    ):
         """
         Args:
             model: PyTorch model to be used for federated continual learning.
@@ -24,7 +31,7 @@ class FedProtoStrategy:
         self.model = model
         self.proto_config = proto_config
         self.num_clients = num_clients
-        self.lambda_proto = proto_config.get('lambda_proto', 1.0)
+        self.lambda_proto = proto_config.get("lambda_proto", 1.0)
         # initialize prototypes for each client (dict: class_id -> (prototype tensor, count))
         self.client_protos = [{} for _ in range(num_clients)]
         # store global prototypes (dict: class_id -> prototype tensor)
@@ -91,7 +98,9 @@ class FedProtoStrategy:
             # prototype regularization: sum squared distance to global prototype (if available)
             for lbl in batch_protos:
                 if lbl in self.global_protos:
-                    proto_reg += torch.norm(batch_protos[lbl] - self.global_protos[lbl]) ** 2
+                    proto_reg += (
+                        torch.norm(batch_protos[lbl] - self.global_protos[lbl]) ** 2
+                    )
             loss = ce_loss + self.lambda_proto * proto_reg
             loss.backward()
             optimizer.step()
@@ -99,7 +108,9 @@ class FedProtoStrategy:
         for label in features:
             features[label] /= counts[label]
         # store as (prototype, count)
-        self.client_protos[client_id] = {lbl: (features[lbl], counts[lbl]) for lbl in features}
+        self.client_protos[client_id] = {
+            lbl: (features[lbl], counts[lbl]) for lbl in features
+        }
         return self.get_prototype_params(client_id)
 
     def evaluate(self, data):
@@ -112,7 +123,7 @@ class FedProtoStrategy:
                 feats = self.model(x)
                 preds = []
                 for i in range(feats.size(0)):
-                    min_dist = float('inf')
+                    min_dist = float("inf")
                     pred = -1
                     for cls, proto in self.global_protos.items():
                         dist = torch.norm(feats[i] - proto)
@@ -123,4 +134,4 @@ class FedProtoStrategy:
                 preds = torch.tensor(preds, device=y.device)
                 correct += (preds == y).sum().item()
                 total += y.size(0)
-        return correct / total if total > 0 else 0.0 
+        return correct / total if total > 0 else 0.0

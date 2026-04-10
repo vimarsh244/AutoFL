@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from flwr.common import Parameters
 
+
 def set_parameters(net, parameters: List[np.ndarray]):
     params_dict = zip(net.state_dict().keys(), parameters)
     state_dict = OrderedDict({k: torch.from_numpy(v) for k, v in params_dict})
@@ -13,19 +14,23 @@ def set_parameters(net, parameters: List[np.ndarray]):
         net.load_state_dict(state_dict, strict=True)
     except RuntimeError as e:
         if "size mismatch" in str(e):
-            print(f"ERROR: Parameter size mismatch detected! This indicates model architecture inconsistency.")
+            print(
+                f"ERROR: Parameter size mismatch detected! This indicates model architecture inconsistency."
+            )
             print(f"Model type: {type(net).__name__}")
-            
+
             # Show model details for debugging
-            if hasattr(net, 'backbone'):
+            if hasattr(net, "backbone"):
                 print(f"Model backbone: {type(net.backbone).__name__}")
-            if hasattr(net, 'version'):
+            if hasattr(net, "version"):
                 print(f"Model version: {net.version}")
-            if hasattr(net, 'num_classes'):
+            if hasattr(net, "num_classes"):
                 print(f"Model classes: {net.num_classes}")
-            
+
             print(f"Full error: {e}")
-            print("This likely means different clients are creating models with different configurations.")
+            print(
+                "This likely means different clients are creating models with different configurations."
+            )
             print("Please ensure all clients use identical model configurations.")
             raise e  # Don't continue with mismatched models
         else:
@@ -43,16 +48,17 @@ def serialize_dict_to_parameters(params_dict):
         if isinstance(value, dict):
             # Handle nested dict (like masked_base)
             for subkey, tensor in value.items():
-                if hasattr(tensor, 'detach'):  # torch tensor
+                if hasattr(tensor, "detach"):  # torch tensor
                     tensors.append(tensor.detach().cpu().numpy())
                 elif isinstance(tensor, np.ndarray):
                     tensors.append(tensor)
-        elif hasattr(value, 'detach'):  # torch tensor
+        elif hasattr(value, "detach"):  # torch tensor
             tensors.append(value.detach().cpu().numpy())
         elif isinstance(value, np.ndarray):
             tensors.append(value)
-    
+
     return Parameters(tensors=tensors, tensor_type="numpy.ndarray")
+
 
 def deserialize_parameters_to_dict(parameters):
     """Deserialize Flower Parameters to a dictionary."""

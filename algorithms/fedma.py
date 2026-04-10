@@ -19,28 +19,35 @@ from scipy.optimize import linear_sum_assignment
 # returns two lists of indices representing the optimal assignment
 # see fedma paper section 2.1 and 2.2
 
+
 def hungarian_matching(cost_matrix):
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
     return row_ind, col_ind
+
 
 # match neurons (fc) or channels (conv) across clients using the hungarian algorithm
 # returns a list of permuted weights for each client, aligned for averaging
 # see fedma paper, algorithm 1
 
-def match_layer_weights(client_weights: List[torch.Tensor], layer_type: str = 'fc') -> List[torch.Tensor]:
+
+def match_layer_weights(
+    client_weights: List[torch.Tensor], layer_type: str = "fc"
+) -> List[torch.Tensor]:
     # flatten neurons/channels for matching
-    if layer_type == 'fc':
+    if layer_type == "fc":
         # shape: (out_features, in_features)
         # match along out_features (neurons)
         features = [w.detach().cpu().numpy() for w in client_weights]
         n = features[0].shape[0]
-    elif layer_type == 'conv':
+    elif layer_type == "conv":
         # shape: (out_channels, in_channels, k, k)
         # match along out_channels (channels)
-        features = [w.detach().cpu().reshape(w.shape[0], -1).numpy() for w in client_weights]
+        features = [
+            w.detach().cpu().reshape(w.shape[0], -1).numpy() for w in client_weights
+        ]
         n = features[0].shape[0]
     else:
-        raise ValueError('unsupported layer type')
+        raise ValueError("unsupported layer type")
     # use first client as reference for matching
     ref = features[0]
     permuted = [client_weights[0]]
@@ -52,15 +59,22 @@ def match_layer_weights(client_weights: List[torch.Tensor], layer_type: str = 'f
                 cost[j, k] = np.linalg.norm(ref[j] - features[i][k])
         row_ind, col_ind = hungarian_matching(cost)
         # permute client i's weights to align with reference
-        if layer_type == 'fc':
+        if layer_type == "fc":
             w_perm = client_weights[i][col_ind]
         else:  # conv
             w_perm = client_weights[i][col_ind]
         permuted.append(w_perm)
     return permuted
 
+
 class FedMAStrategy:
-    def __init__(self, model: nn.Module, ma_config: Dict[str, Any], num_clients: int = 2, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        ma_config: Dict[str, Any],
+        num_clients: int = 2,
+        **kwargs,
+    ):
         """
         implements the fedma algorithm for federated continual learning.
         see: https://arxiv.org/abs/2002.06440 and https://github.com/IBM/FedMA
@@ -81,17 +95,21 @@ class FedMAStrategy:
         follows fedma algorithm 1: match, aggregate, freeze, retrain, repeat
         """
         if num_layers is None:
-            num_layers = len(list(self.model.state_dict().keys())) // 2  # rough guess: weight+bias per layer
+            num_layers = (
+                len(list(self.model.state_dict().keys())) // 2
+            )  # rough guess: weight+bias per layer
         # get layer names (assume all clients have same structure)
-        layer_names = [k for k in self.model.state_dict().keys() if 'weight' in k]
+        layer_names = [k for k in self.model.state_dict().keys() if "weight" in k]
         for l, layer_name in enumerate(layer_names[:num_layers]):
             # 1. extract weights for this layer from all clients
-            client_weights = [cm.state_dict()[layer_name].clone() for cm in self.client_models]
+            client_weights = [
+                cm.state_dict()[layer_name].clone() for cm in self.client_models
+            ]
             # 2. match and permute using hungarian algorithm
             if len(client_weights[0].shape) == 2:
-                layer_type = 'fc'
+                layer_type = "fc"
             elif len(client_weights[0].shape) == 4:
-                layer_type = 'conv'
+                layer_type = "conv"
             else:
                 continue  # skip unsupported
             permuted_weights = match_layer_weights(client_weights, layer_type)
@@ -109,12 +127,19 @@ class FedMAStrategy:
                     if name == layer_name:
                         param.requires_grad = False
             # 6. retrain next layer(s) on each client (only unfrozen layers)
-            if l+1 < num_layers:
-                next_layer = layer_names[l+1]
+            if l + 1 < num_layers:
+                next_layer = layer_names[l + 1]
                 for client_id, cm in enumerate(self.client_models):
                     cm.train()
                     # only optimize next layer's params
-                    optimizer = torch.optim.SGD([p for n, p in cm.named_parameters() if n == next_layer and p.requires_grad], lr=0.01)
+                    optimizer = torch.optim.SGD(
+                        [
+                            p
+                            for n, p in cm.named_parameters()
+                            if n == next_layer and p.requires_grad
+                        ],
+                        lr=0.01,
+                    )
                     for x, y in client_data[client_id]:
                         optimizer.zero_grad()
                         out = cm(x)
@@ -130,19 +155,19 @@ class FedMAStrategy:
         state_dicts = [m.state_dict() for m in matched_models]
         global_state = copy.deepcopy(state_dicts[0])
         for k in global_state.keys():
-            if 'weight' in k:
+            if "weight" in k:
                 ws = [sd[k] for sd in state_dicts]
                 if len(ws[0].shape) == 2:
-                    layer_type = 'fc'
+                    layer_type = "fc"
                 elif len(ws[0].shape) == 4:
-                    layer_type = 'conv'
+                    layer_type = "conv"
                 else:
                     continue
                 # match and permute for this layer
                 ws_matched = match_layer_weights(ws, layer_type)
                 # average matched weights
                 global_state[k] = torch.stack(ws_matched, dim=0).mean(dim=0)
-            elif 'bias' in k:
+            elif "bias" in k:
                 # just average biases (no permutation needed)
                 bs = [sd[k] for sd in state_dicts]
                 global_state[k] = torch.stack(bs, dim=0).mean(dim=0)
@@ -174,4 +199,4 @@ class FedMAStrategy:
                 pred = out.argmax(dim=1)
                 correct += (pred == y).sum().item()
                 total += y.size(0)
-        return correct / total if total > 0 else 0.0 
+        return correct / total if total > 0 else 0.0

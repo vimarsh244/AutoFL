@@ -19,11 +19,19 @@ from utils.latency_simulator import get_runtime_recorder
 class LatencyAwareFedAvg(FedAvg):
     """FedAvg variant that skips dropped clients and logs aggregation runtime."""
 
-    def __init__(self, *args, latency_cfg: Optional[Mapping[str, object]] = None, **kwargs):
+    def __init__(
+        self, *args, latency_cfg: Optional[Mapping[str, object]] = None, **kwargs
+    ):
         self._latency_cfg = dict(latency_cfg) if latency_cfg is not None else {}
-        self._latency_sampling_mode = str(self._latency_cfg.get("sampling_mode", "mean")).lower()
-        self._skip_if_slow_aggregation = bool(self._latency_cfg.get("skip_if_slow_aggregation", False))
-        self._skip_if_slow_margin = float(self._latency_cfg.get("skip_if_slow_margin", 1.0))
+        self._latency_sampling_mode = str(
+            self._latency_cfg.get("sampling_mode", "mean")
+        ).lower()
+        self._skip_if_slow_aggregation = bool(
+            self._latency_cfg.get("skip_if_slow_aggregation", False)
+        )
+        self._skip_if_slow_margin = float(
+            self._latency_cfg.get("skip_if_slow_margin", 1.0)
+        )
         self._sleep_log_enabled = bool(
             self._latency_cfg.get("sleep_log", self._latency_cfg.get("sleep", False))
         )
@@ -57,20 +65,28 @@ class LatencyAwareFedAvg(FedAvg):
 
         latency_component = 0.0
         if self._sleep_log_enabled and expected_times:
-            finite_expected = [value for value in expected_times if math.isfinite(value) and value >= 0.0]
+            finite_expected = [
+                value
+                for value in expected_times
+                if math.isfinite(value) and value >= 0.0
+            ]
             if finite_expected:
                 latency_component = float(np.max(finite_expected))
 
         duration_reported = duration_wall_clock + latency_component
 
-        expected_mean = float(np.mean(expected_times)) if expected_times else float("nan")
+        expected_mean = (
+            float(np.mean(expected_times)) if expected_times else float("nan")
+        )
         expected_max = float(np.max(expected_times)) if expected_times else float("nan")
         aggregation_threshold = (
             expected_max * max(self._skip_if_slow_margin, 1e-6)
             if expected_times and expected_max > 0
             else float("nan")
         )
-        aggregation_delta = duration_reported - expected_mean if expected_times else float("nan")
+        aggregation_delta = (
+            duration_reported - expected_mean if expected_times else float("nan")
+        )
         skipped_due_to_latency = False
 
         if (
@@ -116,7 +132,7 @@ class LatencyAwareFedAvg(FedAvg):
                 "server/aggregation_time_s": duration_reported,
                 "server/aggregation_wall_clock_s": duration_wall_clock,
                 "server/aggregation_latency_component_s": latency_component,
-                "server/total_results": len(results), # KIND OF Useless (but keeping)
+                "server/total_results": len(results),  # KIND OF Useless (but keeping)
                 "server/accepted_results": len(filtered_results),
                 "server/dropped_clients": len(dropped_clients),
                 "server/expected_mean_network_time_s": expected_mean,

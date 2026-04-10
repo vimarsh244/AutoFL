@@ -79,7 +79,11 @@ class BenchmarkAdapter:
         if primary_key in metrics:
             return float(metrics[primary_key])
         for key, value in metrics.items():
-            if key.startswith(metric_prefix) and f"/{phase}/" in key and key.endswith(target_stream):
+            if (
+                key.startswith(metric_prefix)
+                and f"/{phase}/" in key
+                and key.endswith(target_stream)
+            ):
                 return float(value)
         for key, value in metrics.items():
             if key.startswith(metric_prefix) and f"/{phase}/" in key:
