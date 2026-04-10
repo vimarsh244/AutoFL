@@ -7,6 +7,7 @@ from flwr_datasets import FederatedDataset
 
 from pathlib import Path
 import sys
+
 sys.path.append(str(Path(__file__).parent.parent))
 from config_utils import load_config
 from workloads.partitioning import build_partitioner
@@ -17,7 +18,7 @@ BATCH_SIZE = cfg.dataset.batch_size
 
 fds = None
 
- 
+
 def load_datasets(partition_id: int):
     global fds
     if fds is None:

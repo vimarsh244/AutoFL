@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 def train(net, trainloader, epochs: int, verbose=True):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()

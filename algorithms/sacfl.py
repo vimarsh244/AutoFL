@@ -16,18 +16,22 @@ from torch import nn
 from typing import Any, Dict, List, Optional
 import copy
 
+
 class SacFLEncoderDecoder(nn.Module):
     """
     A simple encoder-decoder wrapper for SacFL. The encoder is the global (task-robust) part,
     the decoder is the local (task-sensitive) part. This structure is required for proper aggregation.
     """
+
     def __init__(self, encoder: nn.Module, decoder: nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
+
     def forward(self, x):
         features = self.encoder(x)
         return self.decoder(features)
+
 
 class SacFLStrategy:
     """
@@ -35,18 +39,29 @@ class SacFLStrategy:
     'SacFL: Self-Adaptive Federated Continual Learning for Resource-Constrained End Devices'
     https://arxiv.org/abs/2505.00365
     """
-    def __init__(self, model: SacFLEncoderDecoder, sacfl_config: Dict[str, Any], num_clients: int = 2, **kwargs):
+
+    def __init__(
+        self,
+        model: SacFLEncoderDecoder,
+        sacfl_config: Dict[str, Any],
+        num_clients: int = 2,
+        **kwargs,
+    ):
         self.model = model
         self.sacfl_config = sacfl_config
         self.num_clients = num_clients
-        self.client_decoders = [copy.deepcopy(model.decoder) for _ in range(num_clients)]
+        self.client_decoders = [
+            copy.deepcopy(model.decoder) for _ in range(num_clients)
+        ]
         self.global_encoder = copy.deepcopy(model.encoder)
-        self.shift_threshold = sacfl_config.get('shift_threshold', 1.0)
+        self.shift_threshold = sacfl_config.get("shift_threshold", 1.0)
         self.last_contrastive_loss = [0.0 for _ in range(num_clients)]
         # Simple memory buffer for contrastive learning (per client)
-        self.memory_size = sacfl_config.get('memory_size', 128)
-        self.memory_buffers = [[] for _ in range(num_clients)]  # list of lists of tensors
-        self.temperature = sacfl_config.get('contrastive_temperature', 0.5)
+        self.memory_size = sacfl_config.get("memory_size", 128)
+        self.memory_buffers = [
+            [] for _ in range(num_clients)
+        ]  # list of lists of tensors
+        self.temperature = sacfl_config.get("contrastive_temperature", 0.5)
 
     def aggregate_encoder(self, client_encoders: List[nn.Module]):
         # Aggregate encoder parameters (FedAvg)
@@ -76,7 +91,10 @@ class SacFLStrategy:
                 features = self.model.encoder(x)
                 self._update_memory(client_id, features)
             contrastive_loss = self.compute_contrastive_loss(client_id, x)
-            total_loss = ce_loss + self.sacfl_config.get('contrastive_weight', 1.0) * contrastive_loss
+            total_loss = (
+                ce_loss
+                + self.sacfl_config.get("contrastive_weight", 1.0) * contrastive_loss
+            )
             total_loss.backward()
             optimizer.step()
         self.client_decoders[client_id] = copy.deepcopy(self.model.decoder)
@@ -92,7 +110,7 @@ class SacFLStrategy:
         """
         Utility to reset module weights (for defense/continual learning trigger).
         """
-        if hasattr(m, 'reset_parameters'):
+        if hasattr(m, "reset_parameters"):
             m.reset_parameters()
 
     def _update_memory(self, client_id: int, features: torch.Tensor):
@@ -101,7 +119,7 @@ class SacFLStrategy:
         for f in features:
             buffer.append(f.detach().cpu())
         if len(buffer) > self.memory_size:
-            self.memory_buffers[client_id] = buffer[-self.memory_size:]
+            self.memory_buffers[client_id] = buffer[-self.memory_size :]
 
     def compute_contrastive_loss(self, client_id: int, x):
         """
@@ -127,9 +145,15 @@ class SacFLStrategy:
             pos_idx = torch.randint(0, mem_feats.size(0), (1,)).item()
             positive = mem_feats[pos_idx]
             # Negatives: all others in memory
-            negatives = torch.cat([mem_feats[:pos_idx], mem_feats[pos_idx+1:]], dim=0) if mem_feats.size(0) > 1 else mem_feats
+            negatives = (
+                torch.cat([mem_feats[:pos_idx], mem_feats[pos_idx + 1 :]], dim=0)
+                if mem_feats.size(0) > 1
+                else mem_feats
+            )
             pos_sim = torch.exp(torch.dot(anchor, positive) / self.temperature)
-            neg_sim = torch.exp(torch.matmul(anchor, negatives.t()) / self.temperature).sum()
+            neg_sim = torch.exp(
+                torch.matmul(anchor, negatives.t()) / self.temperature
+            ).sum()
             loss += -torch.log(pos_sim / (pos_sim + neg_sim + 1e-8))
         return loss / n
 
@@ -149,4 +173,4 @@ class SacFLStrategy:
                 pred = out.argmax(dim=1)
                 correct += (pred == y).sum().item()
                 total += y.size(0)
-        return correct / total if total > 0 else 0.0 
+        return correct / total if total > 0 else 0.0

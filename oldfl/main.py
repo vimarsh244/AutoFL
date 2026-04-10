@@ -7,10 +7,10 @@ from flwr.server import ServerApp
 from client import client_fn
 from server import server_fn
 
-
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print(DEVICE)
+
 
 def main():
     client = ClientApp(client_fn=client_fn)
@@ -22,11 +22,12 @@ def main():
     print("running simul")
 
     run_simulation(
-        server_app = server,
-        client_app = client,
-        num_supernodes = 5,
-        backend_config = backend_config,
+        server_app=server,
+        client_app=client,
+        num_supernodes=5,
+        backend_config=backend_config,
     )
 
+
 if __name__ == "__main__":
-        main()
+    main()

@@ -6,7 +6,10 @@ from flwr.server.strategy import FedAvg
 import wandb
 import os
 
-from clutils.clmetrics import evaluate_metrics_aggregation_fn, fit_metrics_aggregation_fn
+from clutils.clmetrics import (
+    evaluate_metrics_aggregation_fn,
+    fit_metrics_aggregation_fn,
+)
 
 NUM_ROUNDS = 5
 NUM_CLIENTS = 5
@@ -20,18 +23,16 @@ def fit_config(server_round: int):
     """
     config = {
         "server_round": server_round,  # The current round of federated learning
-        "local_epochs": 3, 
-        "num_rounds": NUM_ROUNDS
+        "local_epochs": 3,
+        "num_rounds": NUM_ROUNDS,
     }
     return config
 
+
 def eval_config(server_round: int):
-    config = {
-            "server_round": server_round,
-            "local_epochs": 3,
-            "num_rounds": NUM_ROUNDS
-            }
+    config = {"server_round": server_round, "local_epochs": 3, "num_rounds": NUM_ROUNDS}
     return config
+
 
 # Create FedAvg strategy
 strategy = FedAvg(
@@ -43,8 +44,9 @@ strategy = FedAvg(
     on_fit_config_fn=fit_config,
     on_evaluate_config_fn=eval_config,
     evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
-    fit_metrics_aggregation_fn=fit_metrics_aggregation_fn
+    fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
 )
+
 
 def server_fn(context: Context) -> ServerAppComponents:
     """Construct components that set the ServerApp behaviour.
@@ -58,5 +60,3 @@ def server_fn(context: Context) -> ServerAppComponents:
     config = ServerConfig(NUM_ROUNDS)
 
     return ServerAppComponents(strategy=strategy, config=config)
-
-

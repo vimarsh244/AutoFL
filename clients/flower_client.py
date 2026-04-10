@@ -70,14 +70,34 @@ class FlowerClient(NumPyClient):
             self.client_state.config_records["global_eval_metrics"] = ConfigRecord()
         if "availability" not in self.client_state.config_records:
             self.client_state.config_records["availability"] = ConfigRecord()
-        if "accuracy_per_exp" not in self.client_state.config_records["local_eval_metrics"]:
-            self.client_state.config_records["local_eval_metrics"]["accuracy_per_exp"] = []
-        if "accuracy_per_exp" not in self.client_state.config_records["global_eval_metrics"]:
-            self.client_state.config_records["global_eval_metrics"]["accuracy_per_exp"] = []
-        if "rounds_selected" not in self.client_state.config_records["local_eval_metrics"]:
-            self.client_state.config_records["local_eval_metrics"]["rounds_selected"] = []
-        if "rounds_selected" not in self.client_state.config_records["global_eval_metrics"]:
-            self.client_state.config_records["global_eval_metrics"]["rounds_selected"] = []
+        if (
+            "accuracy_per_exp"
+            not in self.client_state.config_records["local_eval_metrics"]
+        ):
+            self.client_state.config_records["local_eval_metrics"][
+                "accuracy_per_exp"
+            ] = []
+        if (
+            "accuracy_per_exp"
+            not in self.client_state.config_records["global_eval_metrics"]
+        ):
+            self.client_state.config_records["global_eval_metrics"][
+                "accuracy_per_exp"
+            ] = []
+        if (
+            "rounds_selected"
+            not in self.client_state.config_records["local_eval_metrics"]
+        ):
+            self.client_state.config_records["local_eval_metrics"][
+                "rounds_selected"
+            ] = []
+        if (
+            "rounds_selected"
+            not in self.client_state.config_records["global_eval_metrics"]
+        ):
+            self.client_state.config_records["global_eval_metrics"][
+                "rounds_selected"
+            ] = []
 
         self.cfg = cfg
         self.net = net
@@ -141,7 +161,9 @@ class FlowerClient(NumPyClient):
         exceeded_threshold = False
 
         if self.latency_enabled and self.latency_sim:
-            latency_sample = self.latency_sim.sample(self.partition_id, rnd, payload_bytes)
+            latency_sample = self.latency_sim.sample(
+                self.partition_id, rnd, payload_bytes
+            )
             base_delay_s = latency_sample.base_delay_s
             download_time_s = latency_sample.download_time_s
             upload_time_s = latency_sample.upload_time_s
@@ -253,8 +275,12 @@ class FlowerClient(NumPyClient):
             cprint("Check Cumalative FM", "blue")
             cprint("History of Accuracy per Experience for this client")
             print(json.dumps(hist_accpexp, indent=2))
-            print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-            print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+            print(
+                f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}"
+            )
+            print(
+                f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}"
+            )
             print(f"Cumalative Forgetting Measure: {cmfm}")
 
             sw_fmpexp = []
@@ -266,17 +292,23 @@ class FlowerClient(NumPyClient):
             swfm = (sum(sw_fmpexp) / denominator) if sw_fmpexp else 0.0
 
             cprint("Check StepWise FM", "blue")
-            print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
+            print(
+                f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}"
+            )
             prev_accpexp = json.loads(hist_accpexp[-1]) if hist_accpexp else []
             print(f"Prev Accuracy per Experience {json.dumps(prev_accpexp, indent=4)}")
-            print(f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}")
+            print(
+                f"StepWise Forgetting per Experience: {json.dumps(sw_fmpexp, indent=4)}"
+            )
             print(f"StepWise Forgetting Measure: {swfm}")
 
         total_round_time_wall = time.time() - round_start
 
         network_sleep_after = 0.0
         if latency_sample is not None and not drop_due_to_latency and self.latency_sim:
-            simulated_latency_post = self.latency_sim.sleep_post_training(latency_sample)
+            simulated_latency_post = self.latency_sim.sleep_post_training(
+                latency_sample
+            )
             network_sleep_after = upload_time_s
 
         simulated_latency_total = 0.0
@@ -311,12 +343,22 @@ class FlowerClient(NumPyClient):
             "timing/round_total_s": float(reported_round_total),
         }
 
-        if self.latency_sim and getattr(self.latency_sim, "log_round_time_variance", False):
-            fit_dict_return["timing/round_without_latency_s"] = float(total_round_time_wall)
-            fit_dict_return["timing/round_latency_component_s"] = float(simulated_latency_total)
-        cprint("----------------------------Results After Fit--------------------------------")
+        if self.latency_sim and getattr(
+            self.latency_sim, "log_round_time_variance", False
+        ):
+            fit_dict_return["timing/round_without_latency_s"] = float(
+                total_round_time_wall
+            )
+            fit_dict_return["timing/round_latency_component_s"] = float(
+                simulated_latency_total
+            )
+        cprint(
+            "----------------------------Results After Fit--------------------------------"
+        )
         print(json.dumps(fit_dict_return, indent=4))
-        cprint("-----------------------------------------------------------------------")
+        cprint(
+            "-----------------------------------------------------------------------"
+        )
 
         print("Logging Client States")
         if rnd != 0 and not drop_due_to_latency:
@@ -386,7 +428,9 @@ class FlowerClient(NumPyClient):
         cprint("History of Accuracy per Experience for this client")
         print(json.dumps(hist_accpexp, indent=2))
         print(f"Current Accuracy per Experience: {json.dumps(curr_accpexp, indent=4)}")
-        print(f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}")
+        print(
+            f"Cumalative Forgetting per Experience: {json.dumps(cm_fmpexp, indent=4)}"
+        )
         print(f"Cumalative Forgetting Measure: {cmfm}")
 
         sw_fmpexp = []

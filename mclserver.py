@@ -73,7 +73,9 @@ def _resolve_strategy_class(strategy_name: str):
     )
 
 
-StrategyCls = _resolve_strategy_class(cfg.server.get("strategy", "latency_aware_fedavg"))
+StrategyCls = _resolve_strategy_class(
+    cfg.server.get("strategy", "latency_aware_fedavg")
+)
 
 strategy_kwargs = {
     "fraction_fit": cfg.server.fraction_fit,
@@ -100,6 +102,7 @@ if issubclass(StrategyCls, LatencyAwareFedAvg):
 
 strategy = StrategyCls(**strategy_kwargs)
 
+
 def server_fn(context: Context) -> ServerAppComponents:
     """Construct components that set the ServerApp behaviour.
 
@@ -112,5 +115,3 @@ def server_fn(context: Context) -> ServerAppComponents:
     config = ServerConfig(cfg.server.num_rounds)
 
     return ServerAppComponents(strategy=strategy, config=config)
-
-

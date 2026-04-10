@@ -1,7 +1,7 @@
 from utils.ParamFns import set_parameters, get_parameters
 from utils.TrainTestFns import train, test
 from models.SimpleCNN import Net
-from workloads.CIFAR10 import load_datasets 
+from workloads.CIFAR10 import load_datasets
 
 import flwr
 import torch
@@ -9,6 +9,7 @@ from flwr.client import Client, ClientApp, NumPyClient
 from flwr.common import Metrics, Context
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 class FlowerClient(NumPyClient):
     def __init__(self, net, trainloader, valloader):
@@ -47,5 +48,3 @@ def client_fn(context: Context) -> Client:
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
     return FlowerClient(net, trainloader, valloader).to_client()
-
-

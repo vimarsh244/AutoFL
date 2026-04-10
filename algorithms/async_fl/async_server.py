@@ -56,7 +56,7 @@ ReconnectResultsAndFailures = Tuple[
 
 class AsyncServer(Server):
     """Flower server implementing asynchronous FL.
-    
+
     This server runs clients concurrently using a ThreadPoolExecutor and
     updates the global model immediately upon each client completion,
     rather than waiting for all clients in a round.
@@ -74,7 +74,7 @@ class AsyncServer(Server):
         config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the AsyncServer.
-        
+
         Args:
             strategy: The FL strategy (e.g., FedAvg) for client selection/config
             client_manager: Client manager (should be AsyncClientManager)
@@ -92,10 +92,10 @@ class AsyncServer(Server):
         self._client_manager = client_manager
         self.max_workers = max_workers
         self.server_artificial_delay = server_artificial_delay
-        
+
         # Track client data percentages for streaming scenarios
         self.client_data_percs: Dict[str, List[float]] = {}
-        
+
         # Configuration
         config = config or {}
         self.is_streaming = config.get("is_streaming", False)
@@ -105,15 +105,15 @@ class AsyncServer(Server):
             "n_last_samples_for_data_loading_fit", 1000
         )
         self.dataset_seed = config.get("dataset_seed", 42)
-        
+
         # Timing
         self.start_timestamp = 0.0
         self.end_timestamp = 0.0
         self.model_param_lock = Lock()
-        
+
         # Client iteration tracking
         self.client_iters = np.zeros(100)  # Support up to 100 clients
-        
+
         # Client delay configuration
         if self.client_local_delay:
             np.random.seed(self.dataset_seed)
@@ -146,13 +146,13 @@ class AsyncServer(Server):
 
     def fit(self, num_rounds: int, timeout: Optional[float]) -> Tuple[History, float]:
         """Run asynchronous federated learning.
-        
+
         Note: num_rounds is ignored; training runs for total_train_time seconds.
-        
+
         Args:
             num_rounds: Ignored (kept for API compatibility)
             timeout: Timeout for client operations
-            
+
         Returns:
             Tuple of (History, elapsed_time)
         """
@@ -183,7 +183,7 @@ class AsyncServer(Server):
         self.end_timestamp = end_timestamp
         self.start_timestamp = time()
         counter = 1
-        
+
         # Start initial fit round
         self.fit_round(
             server_round=0,
@@ -219,11 +219,11 @@ class AsyncServer(Server):
         self.save_model()
         elapsed = end_time - start_time
         log(INFO, "Async FL finished in %s seconds", elapsed)
-        
+
         # Log async summary
         summary = history.get_async_metrics_summary()
         log(INFO, "Async metrics summary: %s", summary)
-        
+
         return history, elapsed
 
     def save_model(self) -> None:
@@ -302,13 +302,15 @@ class AsyncServer(Server):
             history=history,
         )
 
-    def get_config_for_client_fit(self, client_id: str, iter: int = 0) -> Dict[str, Any]:
+    def get_config_for_client_fit(
+        self, client_id: str, iter: int = 0
+    ) -> Dict[str, Any]:
         """Get configuration for client fit call."""
         config: Dict[str, Any] = {}
-        
+
         # Add staleness tracking
         config["start_timestamp"] = time()
-        
+
         if self.client_local_delay and int(client_id) in self.clients_with_delay:
             idx = np.where(self.clients_with_delay == int(client_id))[0]
             if len(idx) > 0:
@@ -320,18 +322,16 @@ class AsyncServer(Server):
 
         if not self.is_streaming:
             return config
-            
+
         curr_timestamp = time()
         if curr_timestamp > self.end_timestamp:
             return config
-            
+
         if client_id not in self.client_data_percs:
             self.client_data_percs[client_id] = [0.0]
         prev_data_perc = self.client_data_percs[client_id][-1]
         start_timestamp = self.end_timestamp - self.total_train_time
-        data_perc = (
-            (time() - start_timestamp) / self.total_train_time
-        ) * 0.9 + 0.1
+        data_perc = ((time() - start_timestamp) / self.total_train_time) * 0.9 + 0.1
         config["data_percentage"] = data_perc
         config["prev_data_percentage"] = prev_data_perc
         config["data_loading_strategy"] = self.data_loading_strategy
@@ -465,7 +465,7 @@ def _handle_finished_future_after_fit(
         # Calculate staleness
         start_ts = res.metrics.get("start_timestamp", time())
         t_diff = time() - start_ts
-        
+
         # Aggregate with async strategy
         parameters_aggregated = server.async_strategy.average(
             server.get_current_params(),
@@ -482,7 +482,12 @@ def _handle_finished_future_after_fit(
             metrics,
             timestamp=time(),
         )
-        log(DEBUG, "Updated global model from client %s (staleness: %.2fs)", clientProxy.cid, t_diff)
+        log(
+            DEBUG,
+            "Updated global model from client %s (staleness: %.2fs)",
+            clientProxy.cid,
+            t_diff,
+        )
 
     # Restart client if still within training time
     if time() < end_timestamp:

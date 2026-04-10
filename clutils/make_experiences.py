@@ -16,8 +16,12 @@ def split_dataset(dataset, n_experiences):
     n = len(dataset)
     indices = list(range(n))
     chunk_size = n // n_experiences
-    splits = [indices[i*chunk_size:(i+1)*chunk_size] for i in range(n_experiences-1)]
-    splits.append(indices[(n_experiences-1)*chunk_size:])  # Last split takes the remainder
+    splits = [
+        indices[i * chunk_size : (i + 1) * chunk_size] for i in range(n_experiences - 1)
+    ]
+    splits.append(
+        indices[(n_experiences - 1) * chunk_size :]
+    )  # Last split takes the remainder
 
     avalanche_experiences = []
     for i, idxs in enumerate(splits):
@@ -25,5 +29,5 @@ def split_dataset(dataset, n_experiences):
         # Just create AvalancheDataset without task_labels
         av_dataset = AvalancheDataset(subset)
         avalanche_experiences.append(av_dataset)
-    
+
     return avalanche_experiences

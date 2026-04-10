@@ -15,8 +15,16 @@ from typing import Any, Dict, List, Optional
 import copy
 import torch.nn.functional as F
 
+
 class FedGEMStrategy:
-    def __init__(self, model: nn.Module, gem_config: Dict[str, Any], num_clients: int = 2, memory_size: int = 200, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        gem_config: Dict[str, Any],
+        num_clients: int = 2,
+        memory_size: int = 200,
+        **kwargs,
+    ):
         """
         Args:
             model: PyTorch model to be used for federated continual learning.
@@ -54,7 +62,7 @@ class FedGEMStrategy:
         for mem in client_memories:
             all_samples.extend(mem)
         if len(all_samples) > self.memory_size:
-            indices = torch.randperm(len(all_samples))[:self.memory_size]
+            indices = torch.randperm(len(all_samples))[: self.memory_size]
             agg_memory = [all_samples[i] for i in indices]
         else:
             agg_memory = all_samples
@@ -78,7 +86,7 @@ class FedGEMStrategy:
         for p in model.parameters():
             if p.grad is not None:
                 numel = p.grad.numel()
-                p.grad.copy_(new_grad[pointer:pointer+numel].view_as(p.grad))
+                p.grad.copy_(new_grad[pointer : pointer + numel].view_as(p.grad))
                 pointer += numel
 
     def _project_grad(self, grad, mem_grads):
@@ -99,7 +107,10 @@ class FedGEMStrategy:
         for i in range(mem_grads.size(0)):
             memg = mem_grads[i]
             if torch.dot(grad_proj, memg) < 0:
-                grad_proj = grad_proj - (torch.dot(grad_proj, memg) / (memg.norm() ** 2 + 1e-10)) * memg
+                grad_proj = (
+                    grad_proj
+                    - (torch.dot(grad_proj, memg) / (memg.norm() ** 2 + 1e-10)) * memg
+                )
         return grad_proj
 
     def train_round(self, data, task_id: int, client_id: int):
@@ -157,4 +168,5 @@ class FedGEMStrategy:
                 total += y.size(0)
         return correct / total if total > 0 else 0.0
 
-# NOTE: This is a high-level faithful implementation. For real use, you may want to implement full quadratic programming for projection (see GEM/Fed-A-GEM paper and code), and support buffer-based gradient aggregation at the server. See: https://arxiv.org/abs/2409.01585 and https://github.com/shenghongdai/Fed-A-GEM for further details. 
+
+# NOTE: This is a high-level faithful implementation. For real use, you may want to implement full quadratic programming for projection (see GEM/Fed-A-GEM paper and code), and support buffer-based gradient aggregation at the server. See: https://arxiv.org/abs/2409.01585 and https://github.com/shenghongdai/Fed-A-GEM for further details.

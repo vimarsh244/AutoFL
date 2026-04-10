@@ -81,6 +81,7 @@ partition_strategies = initialize_partition_strategies(
 def _stream_lengths(stream) -> List[int]:
     return [len(exp.dataset) for exp in stream]
 
+
 # Function that launches a Client
 def client_fn(context: Context) -> Client:
     """Create a Flower client representing a single organization."""
@@ -96,7 +97,9 @@ def client_fn(context: Context) -> Client:
         test_experiences = split_dataset(test_data, NUM_EXP)
         trainlen_per_exp = [len(exp) for exp in train_experiences]
         testlen_per_exp = [len(exp) for exp in test_experiences]
-        benchmark = benchmark_from_datasets(train=train_experiences, test=test_experiences)
+        benchmark = benchmark_from_datasets(
+            train=train_experiences, test=test_experiences
+        )
     elif isinstance(dataset_result, dict):
         benchmark = dataset_result["benchmark"]
         if hasattr(benchmark, "train_stream"):
@@ -138,5 +141,3 @@ def client_fn(context: Context) -> Client:
         cfg=cfg,
         experience_count=NUM_EXP,
     ).to_client()
-
-

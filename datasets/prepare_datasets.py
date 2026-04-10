@@ -139,12 +139,28 @@ def prepare_kitti(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download & prepare datasets for AutoFL")
-    parser.add_argument("dataset", choices=["bdd100k", "bdd100k_10k", "kitti"], help="Dataset to prepare")
-    parser.add_argument("--target", default="./data", help="Where to store the extracted dataset")
-    parser.add_argument("--download-dir", default="./downloads", help="Where to keep downloaded archives")
-    parser.add_argument("--skip-download", action="store_true", help="Assume archives already exist")
-    parser.add_argument("--skip-extract", action="store_true", help="Skip extraction step")
+    parser = argparse.ArgumentParser(
+        description="Download & prepare datasets for AutoFL"
+    )
+    parser.add_argument(
+        "dataset",
+        choices=["bdd100k", "bdd100k_10k", "kitti"],
+        help="Dataset to prepare",
+    )
+    parser.add_argument(
+        "--target", default="./data", help="Where to store the extracted dataset"
+    )
+    parser.add_argument(
+        "--download-dir",
+        default="./downloads",
+        help="Where to keep downloaded archives",
+    )
+    parser.add_argument(
+        "--skip-download", action="store_true", help="Assume archives already exist"
+    )
+    parser.add_argument(
+        "--skip-extract", action="store_true", help="Skip extraction step"
+    )
     args = parser.parse_args()
 
     if args.dataset == "bdd100k":
@@ -158,4 +174,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -2,28 +2,36 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from avalanche.benchmarks.utils import as_classification_dataset, AvalancheDataset, as_avalanche_dataset
+from avalanche.benchmarks.utils import (
+    as_classification_dataset,
+    AvalancheDataset,
+    as_avalanche_dataset,
+)
 from avalanche.benchmarks.utils.data import make_avalanche_dataset
 
 import flwr
 from flwr_datasets import FederatedDataset
 
 from omegaconf import OmegaConf
-from pathlib  import Path
+from pathlib import Path
 
 # Setup Config
 import sys
+
 sys.path.append(str(Path(__file__).parent.parent))
 from config_utils import load_config
 from workloads.partitioning import build_partitioner
+
 cfg = load_config()
 
 # NUM_CLIENTS = cfg.server.num_clients
 BATCH_SIZE = cfg.dataset.batch_size
 NUM_CLIENTS = cfg.server.num_clients
 
+
 class TupleDataset(torch.utils.data.Dataset):
     """Convert HuggingFace dataset format to tuple format for Avalanche"""
+
     def __init__(self, hf_dataset):
         self.dataset = hf_dataset
 
@@ -35,9 +43,9 @@ class TupleDataset(torch.utils.data.Dataset):
         return sample["img"], sample["label"]
 
 
- 
 # Cache FederatedDataset
 fds = None
+
 
 def load_datasets(partition_id: int):
     """Load partitioned CIFAR10"""

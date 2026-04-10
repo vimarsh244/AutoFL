@@ -35,7 +35,9 @@ class AsyncHistory(History):
         """Initialize AsyncHistory with async-specific tracking structures."""
         super().__init__()
         # Async-specific tracking structures using timestamps
-        self.metrics_distributed_fit_async: Dict[str, Dict[str, List[Tuple[float, Scalar]]]] = {}
+        self.metrics_distributed_fit_async: Dict[
+            str, Dict[str, List[Tuple[float, Scalar]]]
+        ] = {}
         self.metrics_centralized_async: Dict[str, List[Tuple[float, Scalar]]] = {}
         self.losses_centralized_async: List[Tuple[float, float]] = []
 
@@ -91,11 +93,12 @@ class AsyncHistory(History):
             "num_centralized_evaluations": len(self.losses_centralized_async),
             "num_distributed_fit_metrics": len(self.metrics_distributed_fit_async),
         }
-        
+
         if self.losses_centralized_async:
             summary["final_centralized_loss"] = self.losses_centralized_async[-1][1]
             summary["total_training_time"] = (
-                self.losses_centralized_async[-1][0] - self.losses_centralized_async[0][0]
+                self.losses_centralized_async[-1][0]
+                - self.losses_centralized_async[0][0]
             )
-        
+
         return summary

@@ -12,8 +12,15 @@ from torch import nn
 from typing import Any, Dict, List, Optional, Callable
 import copy
 
+
 class FedRepStrategy:
-    def __init__(self, model: nn.Module, rep_layer_names: List[str], device: str = 'cpu', **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        rep_layer_names: List[str],
+        device: str = "cpu",
+        **kwargs,
+    ):
         """
         Args:
             model: PyTorch model to be used for federated continual learning.
@@ -27,16 +34,24 @@ class FedRepStrategy:
         self.global_rep = self._get_representation()
         self.client_classifiers = {}
         # Optional hooks for continual learning
-        self.on_task_start: Optional[Callable] = kwargs.get('on_task_start', None)
-        self.on_task_end: Optional[Callable] = kwargs.get('on_task_end', None)
+        self.on_task_start: Optional[Callable] = kwargs.get("on_task_start", None)
+        self.on_task_end: Optional[Callable] = kwargs.get("on_task_end", None)
 
     def _get_named_params(self, names: List[str]):
         # get parameters by name
-        return {k: v.clone().detach() for k, v in self.model.state_dict().items() if k in names}
+        return {
+            k: v.clone().detach()
+            for k, v in self.model.state_dict().items()
+            if k in names
+        }
 
     def _get_other_params(self, names: List[str]):
         # get parameters not in names
-        return {k: v.clone().detach() for k, v in self.model.state_dict().items() if k not in names}
+        return {
+            k: v.clone().detach()
+            for k, v in self.model.state_dict().items()
+            if k not in names
+        }
 
     def _set_named_params(self, params: Dict[str, Any]):
         # set parameters by name
@@ -81,9 +96,16 @@ class FedRepStrategy:
         self.global_rep = agg_rep
         return agg_rep
 
-    def train_round(self, data, task_id: int, client_id: int,
-                    local_head_epochs: int = 1, local_rep_epochs: int = 1,
-                    lr: float = 0.01, optimizer_cls=torch.optim.SGD):
+    def train_round(
+        self,
+        data,
+        task_id: int,
+        client_id: int,
+        local_head_epochs: int = 1,
+        local_rep_epochs: int = 1,
+        lr: float = 0.01,
+        optimizer_cls=torch.optim.SGD,
+    ):
         """
         Perform a local training round for a given task (FedRep two-phase training):
         1. Freeze rep, train head for local_head_epochs
@@ -97,9 +119,15 @@ class FedRepStrategy:
         if self.on_task_start:
             self.on_task_start(task_id)
         # Phase 1: Train head (freeze rep)
-        self.freeze_layers([n for n in self.model.state_dict().keys() if n not in self.rep_layer_names])
-        self.unfreeze_layers([n for n in self.model.state_dict().keys() if n not in self.rep_layer_names])
-        optimizer = optimizer_cls(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
+        self.freeze_layers(
+            [n for n in self.model.state_dict().keys() if n not in self.rep_layer_names]
+        )
+        self.unfreeze_layers(
+            [n for n in self.model.state_dict().keys() if n not in self.rep_layer_names]
+        )
+        optimizer = optimizer_cls(
+            filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
+        )
         self.model.train()
         for _ in range(local_head_epochs):
             for x, y in data:
@@ -112,7 +140,9 @@ class FedRepStrategy:
         # Phase 2: Train rep (freeze head)
         self.freeze_layers(self.rep_layer_names)
         self.unfreeze_layers(self.rep_layer_names)
-        optimizer = optimizer_cls(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
+        optimizer = optimizer_cls(
+            filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
+        )
         for _ in range(local_rep_epochs):
             for x, y in data:
                 x, y = x.to(self.device), y.to(self.device)
@@ -140,4 +170,4 @@ class FedRepStrategy:
                 pred = out.argmax(dim=1)
                 correct += (pred == y).sum().item()
                 total += y.size(0)
-        return correct / total if total > 0 else 0.0 
+        return correct / total if total > 0 else 0.0

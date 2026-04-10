@@ -13,8 +13,15 @@ from typing import Any, Dict, List, Optional
 import copy
 import collections
 
+
 class STAMPStrategy:
-    def __init__(self, model: nn.Module, stamp_config: Dict[str, Any], num_clients: int = 2, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        stamp_config: Dict[str, Any],
+        num_clients: int = 2,
+        **kwargs,
+    ):
         """
         Args:
             model: PyTorch model to be used for federated continual learning.
@@ -25,15 +32,19 @@ class STAMPStrategy:
         self.model = model
         self.stamp_config = stamp_config
         self.num_clients = num_clients
-        self.coreset_size = stamp_config.get('coreset_size', 100)
-        self.feature_layer = stamp_config.get('feature_layer', None)  # name of the layer to extract features from
-        self.device = stamp_config.get('device', 'cpu')
+        self.coreset_size = stamp_config.get("coreset_size", 100)
+        self.feature_layer = stamp_config.get(
+            "feature_layer", None
+        )  # name of the layer to extract features from
+        self.device = stamp_config.get("device", "cpu")
         # initialize prototypical coreset for each client
         self.client_coresets = [self.initialize_coreset() for _ in range(num_clients)]
         # store global coreset
         self.global_coreset = copy.deepcopy(self.client_coresets[0])
         # store prototypes for each client and global
-        self.client_prototypes = [{} for _ in range(num_clients)]  # Dict[class, prototype]
+        self.client_prototypes = [
+            {} for _ in range(num_clients)
+        ]  # Dict[class, prototype]
         self.global_prototypes = {}
 
     def initialize_coreset(self):
@@ -72,9 +83,15 @@ class STAMPStrategy:
         return prototypes
 
     def update_client_prototypes(self, client_id: int):
-        self.client_prototypes[client_id] = self.compute_prototypes(self.client_coresets[client_id])
+        self.client_prototypes[client_id] = self.compute_prototypes(
+            self.client_coresets[client_id]
+        )
 
-    def aggregate(self, client_coresets: List[list], client_prototypes: List[Dict[int, torch.Tensor]]):
+    def aggregate(
+        self,
+        client_coresets: List[list],
+        client_prototypes: List[Dict[int, torch.Tensor]],
+    ):
         # aggregate client prototypes (spatial matching)
         # average prototypes for each class across clients
         all_classes = set()
@@ -90,7 +107,7 @@ class STAMPStrategy:
         for cs in client_coresets:
             all_samples.extend(cs)
         if len(all_samples) > self.coreset_size:
-            indices = torch.randperm(len(all_samples))[:self.coreset_size]
+            indices = torch.randperm(len(all_samples))[: self.coreset_size]
             agg_coreset = [all_samples[i] for i in indices]
         else:
             agg_coreset = all_samples
@@ -106,7 +123,9 @@ class STAMPStrategy:
                 loss += torch.nn.functional.mse_loss(features[i], prototypes[cls])
         return loss / features.size(0)
 
-    def train_round(self, data, task_id: int, client_id: int, lambda_proto: float = 1.0):
+    def train_round(
+        self, data, task_id: int, client_id: int, lambda_proto: float = 1.0
+    ):
         # update coreset with new samples
         # data is now a tuple (xs, ys) where xs: [batch, 1, 28, 28], ys: [batch]
         xs, ys = data
@@ -143,4 +162,4 @@ class STAMPStrategy:
                 pred = out.argmax(dim=1)
                 correct += (pred == y).sum().item()
                 total += y.size(0)
-        return correct / total if total > 0 else 0.0 
+        return correct / total if total > 0 else 0.0
