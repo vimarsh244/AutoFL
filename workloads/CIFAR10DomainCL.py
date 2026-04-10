@@ -21,6 +21,8 @@ NUM_CLIENTS = cfg.server.num_clients
 BATCH_SIZE = cfg.dataset.batch_size
 
 fds = None
+# TODO: Convert hugging face to torch and then from torch to avalanche
+
 
 class TupleDataset(torch.utils.data.Dataset):
     """Convert HuggingFace dataset format to tuple format for Avalanche"""

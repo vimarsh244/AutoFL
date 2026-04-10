@@ -4,8 +4,9 @@ import warnings
 from typing import List
 
 import torch
-from flwr.client import Client
-from flwr.common import Context
+import gc  # For garbage collection
+from flwr.client import Client, ClientApp, NumPyClient
+from flwr.common import Metrics, Context, ConfigsRecord
 
 from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
 
