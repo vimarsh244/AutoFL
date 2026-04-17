@@ -1,0 +1,47 @@
+# Baseline: synchronous FL + domain/naive CL loop over 5 class phases (2 classes each)
+# Round r trains on experience (r-1) % 5, so 25 rounds = 5 full phase cycles.
+# Run:
+#   python mclmain.py --config-path config/experiments --config-name split_cifar10_domain_resnet18_baseline
+
+dataset:
+  workload: split_cifar10
+  batch_size: 64
+  num_classes: 10
+  split: iid
+
+model:
+  name: resnet
+  arch: resnet18
+  num_classes: 10
+  pretrained: false
+
+cl:
+  strategy: domain
+  num_experiences: 5
+
+training:
+  learning_rate: 0.001
+  epochs: 1
+
+server:
+  num_rounds: 25
+  num_clients: 5
+  strategy: fedprox
+  fraction_fit: 1.0
+  fraction_eval: 1.0
+  min_fit: 5
+  min_eval: 5
+
+client:
+  num_cpus: 4
+  num_gpus: 0.2
+  epochs: 1
+  falloff: 0.0
+
+latency:
+  enabled: false
+
+wb:
+  project: autofl-testing
+  mode: disabled
+  name: baseline_splitcifar10_domain_resnet18

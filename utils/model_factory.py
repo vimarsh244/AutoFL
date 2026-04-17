@@ -198,10 +198,15 @@ def create_model(cfg):
         )
         return model
 
-    elif cfg.model.name == "resnet":
+    elif cfg.model.name in ["resnet", "resnet18", "resnet34", "resnet50"]:
         from models.ResNet import ResNet
 
-        return ResNet(num_classes=model_classes)
+        arch = getattr(cfg.model, "arch", None)
+        if not arch and cfg.model.name in ["resnet18", "resnet34", "resnet50"]:
+            arch = cfg.model.name
+        if not arch:
+            arch = "resnet18"
+        return ResNet(num_classes=model_classes, arch=arch)
 
     elif cfg.model.name == "simple_cnn":
         from models.SimpleCNN import create_simple_cnn

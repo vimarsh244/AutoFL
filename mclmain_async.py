@@ -135,6 +135,28 @@ def get_async_config(cfg: DictConfig) -> Dict[str, Any]:
     async_cfg = cfg.get("async", {})
     if isinstance(async_cfg, DictConfig):
         async_cfg = OmegaConf.to_container(async_cfg, resolve=True)
+    phase_cfg = async_cfg.get("phase_adaptation", {})
+    if isinstance(phase_cfg, DictConfig):
+        phase_cfg = OmegaConf.to_container(phase_cfg, resolve=True)
+
+    num_phases = int(phase_cfg.get("num_phases", 4))
+    phase_names = phase_cfg.get("phase_names", [])
+    if not isinstance(phase_names, list):
+        phase_names = []
+    phase_names = [str(name) for name in phase_names][:num_phases]
+    if len(phase_names) < num_phases:
+        phase_names.extend(
+            [f"phase_{idx + 1}" for idx in range(len(phase_names), num_phases)]
+        )
+
+    phase_weights = phase_cfg.get("phase_weights", [1.0] * num_phases)
+    if not isinstance(phase_weights, list):
+        phase_weights = [1.0] * num_phases
+
+    adapter_param_patterns = phase_cfg.get("adapter_param_patterns", ["model.fc"])
+    if not isinstance(adapter_param_patterns, list):
+        adapter_param_patterns = ["model.fc"]
+
     return {
         "total_train_time": async_cfg.get("total_train_time", 300),
         "waiting_interval": async_cfg.get("waiting_interval", 10),
@@ -152,6 +174,15 @@ def get_async_config(cfg: DictConfig) -> Dict[str, Any]:
         "simulate_delay": async_cfg.get("simulate_delay", True),
         "min_delay": async_cfg.get("min_delay", 0.5),
         "max_delay": async_cfg.get("max_delay", 3.0),
+        "phase_adaptation": {
+            "enabled": bool(phase_cfg.get("enabled", False)),
+            "num_phases": max(1, num_phases),
+            "phase_names": phase_names,
+            "phase_weights": phase_weights,
+            "adapter_param_patterns": [str(pat) for pat in adapter_param_patterns],
+            "backbone_learning_rate": phase_cfg.get("backbone_learning_rate", None),
+            "adapter_learning_rate": phase_cfg.get("adapter_learning_rate", None),
+        },
     }
 
 
@@ -231,6 +262,66 @@ def get_data_loaders(
     return train_loaders, test_loaders, test_loader
 
 
+def _normalize_phase_weights(raw_weights: List[float], num_phases: int) -> List[float]:
+    weights = raw_weights if len(raw_weights) == num_phases else [1.0] * num_phases
+    weights = [max(float(w), 0.0) for w in weights]
+    total = sum(weights)
+    if total <= 0.0:
+        return [1.0 / num_phases] * num_phases
+    return [w / total for w in weights]
+
+
+def _resolve_phase_idx(
+    elapsed_seconds: float,
+    total_train_time: float,
+    phase_weights: List[float],
+) -> int:
+    if total_train_time <= 0:
+        return 0
+    progress = min(max(elapsed_seconds / total_train_time, 0.0), 1.0)
+    cumulative = 0.0
+    for idx, weight in enumerate(phase_weights):
+        cumulative += weight
+        if progress <= cumulative:
+            return idx
+    return max(0, len(phase_weights) - 1)
+
+
+def _resolve_adapter_indices(
+    state_keys: List[str], adapter_param_patterns: List[str]
+) -> List[int]:
+    indices = [
+        idx
+        for idx, key in enumerate(state_keys)
+        if any(key == pat or key.startswith(pat) for pat in adapter_param_patterns)
+    ]
+    if indices:
+        return indices
+    # Fallback to final classifier weight+bias for common architectures.
+    if len(state_keys) >= 2:
+        return [len(state_keys) - 2, len(state_keys) - 1]
+    return [len(state_keys) - 1]
+
+
+def _compose_model_parameters(
+    total_params: int,
+    backbone_indices: List[int],
+    backbone_params: List[np.ndarray],
+    adapter_indices: List[int],
+    adapter_params: Optional[List[np.ndarray]],
+) -> List[np.ndarray]:
+    full_params: List[Optional[np.ndarray]] = [None] * total_params
+    for pos, param_idx in enumerate(backbone_indices):
+        full_params[param_idx] = backbone_params[pos].copy()
+    if adapter_params is not None:
+        for pos, param_idx in enumerate(adapter_indices):
+            full_params[param_idx] = adapter_params[pos].copy()
+    return [
+        tensor if tensor is not None else np.zeros(1, dtype=np.float32)
+        for tensor in full_params
+    ]
+
+
 def run_async_simulation(
     cfg: DictConfig,
     async_cfg: Dict[str, Any],
@@ -254,6 +345,53 @@ def run_async_simulation(
     )
 
     num_clients = len(train_loaders)
+    phase_cfg = async_cfg.get("phase_adaptation", {})
+    phase_enabled = bool(phase_cfg.get("enabled", False))
+    num_phases = int(phase_cfg.get("num_phases", 4))
+    phase_names = [str(name) for name in phase_cfg.get("phase_names", [])]
+    if len(phase_names) < num_phases:
+        phase_names.extend(
+            [f"phase_{idx + 1}" for idx in range(len(phase_names), num_phases)]
+        )
+    phase_names = phase_names[:num_phases]
+    phase_weights = _normalize_phase_weights(
+        [float(w) for w in phase_cfg.get("phase_weights", [1.0] * num_phases)],
+        num_phases,
+    )
+
+    # Initialize global model and split parameters into backbone/phase-adapter scopes.
+    global_model = model_fn().to(device)
+    state_keys = list(global_model.state_dict().keys())
+    global_params = [val.cpu().numpy() for _, val in global_model.state_dict().items()]
+
+    if phase_enabled:
+        adapter_indices = _resolve_adapter_indices(
+            state_keys,
+            [str(pat) for pat in phase_cfg.get("adapter_param_patterns", ["model.fc"])],
+        )
+    else:
+        adapter_indices = []
+
+    adapter_index_set = set(adapter_indices)
+    backbone_indices = [
+        idx for idx in range(len(global_params)) if idx not in adapter_index_set
+    ]
+    if not backbone_indices:
+        backbone_indices = list(range(len(global_params)))
+        adapter_indices = []
+        adapter_index_set = set()
+        phase_enabled = False
+
+    backbone_initial = [global_params[idx].copy() for idx in backbone_indices]
+    current_backbone_params = ndarrays_to_parameters(backbone_initial)
+
+    phase_adapter_params = []
+    if phase_enabled:
+        template_adapter = [global_params[idx].copy() for idx in adapter_indices]
+        phase_adapter_params = [
+            ndarrays_to_parameters([arr.copy() for arr in template_adapter])
+            for _ in range(num_phases)
+        ]
 
     # Create simulated clients
     print(f"\nCreating {num_clients} simulated clients...")
@@ -265,14 +403,17 @@ def run_async_simulation(
         device=device,
         local_epochs=cfg.client.local_epochs,
         learning_rate=cfg.client.learning_rate,
+        backbone_learning_rate=phase_cfg.get("backbone_learning_rate", None),
+        adapter_learning_rate=phase_cfg.get("adapter_learning_rate", None),
+        adapter_param_patterns=(
+            [str(pat) for pat in phase_cfg.get("adapter_param_patterns", ["model.fc"])]
+            if phase_enabled
+            else None
+        ),
         simulate_delay=async_cfg["simulate_delay"],
         min_delay=async_cfg["min_delay"],
         max_delay=async_cfg["max_delay"],
     )
-
-    # Initialize global model
-    global_model = model_fn().to(device)
-    global_params = [val.cpu().numpy() for _, val in global_model.state_dict().items()]
 
     # Create async strategy
     total_samples = sum(len(loader.dataset) for loader in train_loaders)
@@ -292,7 +433,6 @@ def run_async_simulation(
 
     # Synchronization
     param_lock = Lock()
-    current_params = ndarrays_to_parameters(global_params)
 
     # Training state
     total_train_time = async_cfg["total_train_time"]
@@ -305,11 +445,23 @@ def run_async_simulation(
     print(f"  - Total train time: {total_train_time}s")
     print(f"  - Max concurrent workers: {max_workers}")
     print(f"  - Aggregation: {async_cfg['aggregation_strategy']}")
+    print(f"  - Phase adaptation: {'enabled' if phase_enabled else 'disabled'}")
+    if phase_enabled:
+        print(f"  - Phases: {', '.join(phase_names)}")
     print("=" * 60 + "\n")
 
     # Evaluate initial model
+    initial_eval_params = _compose_model_parameters(
+        total_params=len(state_keys),
+        backbone_indices=backbone_indices,
+        backbone_params=backbone_initial,
+        adapter_indices=adapter_indices,
+        adapter_params=(
+            parameters_to_ndarrays(phase_adapter_params[0]) if phase_enabled else None
+        ),
+    )
     initial_loss, initial_acc = evaluate_global_model(
-        global_model, global_params, global_test_loader, device
+        global_model, initial_eval_params, global_test_loader, device
     )
     print(f"[t=0.0s] Initial - Loss: {initial_loss:.4f}, Accuracy: {initial_acc:.4f}")
     history.add_loss_centralized_async(timestamp=0.0, loss=initial_loss)
@@ -332,6 +484,7 @@ def run_async_simulation(
     start_time = time()
     end_time = start_time + total_train_time
     update_count = 0
+    phase_update_counts = {phase_idx: 0 for phase_idx in range(num_phases)}
 
     def train_client(client_idx: int) -> tuple:
         """Train a single client and return results."""
@@ -339,29 +492,65 @@ def run_async_simulation(
 
         client = clients[client_idx]
         with param_lock:
-            params = current_params
+            elapsed = time() - start_time
+            phase_idx = (
+                _resolve_phase_idx(elapsed, total_train_time, phase_weights)
+                if phase_enabled
+                else 0
+            )
+            current_backbone_nd = parameters_to_ndarrays(current_backbone_params)
+            current_adapter_nd = (
+                parameters_to_ndarrays(phase_adapter_params[phase_idx])
+                if phase_enabled
+                else None
+            )
+            params = ndarrays_to_parameters(
+                _compose_model_parameters(
+                    total_params=len(state_keys),
+                    backbone_indices=backbone_indices,
+                    backbone_params=current_backbone_nd,
+                    adapter_indices=adapter_indices,
+                    adapter_params=current_adapter_nd,
+                )
+            )
 
-        config = {"start_timestamp": time()}
+        config = {"start_timestamp": time(), "phase_idx": phase_idx}
         fit_ins = FitIns(parameters=params, config=config)
         fit_res = client.fit(fit_ins)
 
-        return client_idx, fit_res
+        return client_idx, fit_res, phase_idx
 
-    def aggregate_result(client_idx: int, fit_res):
+    def aggregate_result(client_idx: int, fit_res, dispatched_phase_idx: int):
         """Aggregate a single client result into global model."""
-        nonlocal current_params, update_count
+        nonlocal current_backbone_params, update_count
 
         t_diff = time() - fit_res.metrics.get("start_timestamp", time())
+        fit_nd = parameters_to_ndarrays(fit_res.parameters)
+        fit_backbone_nd = [fit_nd[idx] for idx in backbone_indices]
+        phase_idx = int(fit_res.metrics.get("phase_idx", dispatched_phase_idx))
+        phase_idx = max(0, min(phase_idx, num_phases - 1))
 
         with param_lock:
-            new_params = async_strategy.average(
-                current_params,
-                fit_res.parameters,
+            new_backbone = async_strategy.average(
+                current_backbone_params,
+                ndarrays_to_parameters(fit_backbone_nd),
                 t_diff,
                 fit_res.num_examples,
             )
-            current_params = new_params
+            current_backbone_params = new_backbone
+
+            if phase_enabled and adapter_indices:
+                fit_adapter_nd = [fit_nd[idx] for idx in adapter_indices]
+                new_phase_adapter = async_strategy.average(
+                    phase_adapter_params[phase_idx],
+                    ndarrays_to_parameters(fit_adapter_nd),
+                    t_diff,
+                    fit_res.num_examples,
+                )
+                phase_adapter_params[phase_idx] = new_phase_adapter
+
             update_count += 1
+            phase_update_counts[phase_idx] = phase_update_counts.get(phase_idx, 0) + 1
 
         elapsed = time() - start_time
         history.add_metrics_distributed_fit_async(
@@ -370,11 +559,12 @@ def run_async_simulation(
                 "loss": fit_res.metrics.get("loss", 0),
                 "staleness": t_diff,
                 "samples": fit_res.num_examples,
+                "phase_idx": phase_idx,
             },
             timestamp=elapsed,
         )
 
-        return t_diff
+        return t_diff, phase_idx
 
     # Run async training
     executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -400,12 +590,15 @@ def run_async_simulation(
         for future, client_idx in completed:
             active_futures.discard((future, client_idx))
             try:
-                _, fit_res = future.result()
-                t_diff = aggregate_result(client_idx, fit_res)
+                _, fit_res, dispatched_phase_idx = future.result()
+                t_diff, phase_idx = aggregate_result(
+                    client_idx, fit_res, dispatched_phase_idx
+                )
                 elapsed = time() - start_time
                 print(
                     f"[t={elapsed:.1f}s] Client {client_idx} completed "
-                    f"(staleness: {t_diff:.2f}s, loss: {fit_res.metrics.get('loss', 0):.4f})"
+                    f"(phase: {phase_names[phase_idx]}, staleness: {t_diff:.2f}s, "
+                    f"loss: {fit_res.metrics.get('loss', 0):.4f})"
                 )
             except Exception as e:
                 print(f"[WARNING] Client {client_idx} failed: {e}")
@@ -421,7 +614,25 @@ def run_async_simulation(
         if time() - last_eval_time >= waiting_interval:
             eval_counter += 1
             with param_lock:
-                eval_params = parameters_to_ndarrays(current_params)
+                eval_elapsed = time() - start_time
+                eval_phase_idx = (
+                    _resolve_phase_idx(eval_elapsed, total_train_time, phase_weights)
+                    if phase_enabled
+                    else 0
+                )
+                eval_backbone_nd = parameters_to_ndarrays(current_backbone_params)
+                eval_adapter_nd = (
+                    parameters_to_ndarrays(phase_adapter_params[eval_phase_idx])
+                    if phase_enabled
+                    else None
+                )
+                eval_params = _compose_model_parameters(
+                    total_params=len(state_keys),
+                    backbone_indices=backbone_indices,
+                    backbone_params=eval_backbone_nd,
+                    adapter_indices=adapter_indices,
+                    adapter_params=eval_adapter_nd,
+                )
 
             loss, acc = evaluate_global_model(
                 global_model, eval_params, global_test_loader, device
@@ -429,12 +640,18 @@ def run_async_simulation(
             elapsed = time() - start_time
             print(
                 f"\n[t={elapsed:.1f}s] Evaluation {eval_counter}: "
-                f"Loss: {loss:.4f}, Accuracy: {acc:.4f}, Updates: {update_count}\n"
+                f"Loss: {loss:.4f}, Accuracy: {acc:.4f}, Updates: {update_count}, "
+                f"Phase: {phase_names[eval_phase_idx]}\n"
             )
 
             history.add_loss_centralized_async(timestamp=elapsed, loss=loss)
             history.add_metrics_centralized_async(
-                metrics={"accuracy": acc, "updates": update_count}, timestamp=elapsed
+                metrics={
+                    "accuracy": acc,
+                    "updates": update_count,
+                    "phase_idx": eval_phase_idx,
+                },
+                timestamp=elapsed,
             )
 
             # Log to WandB
@@ -445,6 +662,7 @@ def run_async_simulation(
                         "async/accuracy": acc,
                         "async/updates": update_count,
                         "async/elapsed_time": elapsed,
+                        "async/phase_idx": eval_phase_idx,
                     },
                     step=eval_counter,
                 )
@@ -457,7 +675,25 @@ def run_async_simulation(
 
     # Final evaluation
     with param_lock:
-        final_params = parameters_to_ndarrays(current_params)
+        final_elapsed = time() - start_time
+        final_phase_idx = (
+            _resolve_phase_idx(final_elapsed, total_train_time, phase_weights)
+            if phase_enabled
+            else 0
+        )
+        final_backbone_nd = parameters_to_ndarrays(current_backbone_params)
+        final_adapter_nd = (
+            parameters_to_ndarrays(phase_adapter_params[final_phase_idx])
+            if phase_enabled
+            else None
+        )
+        final_params = _compose_model_parameters(
+            total_params=len(state_keys),
+            backbone_indices=backbone_indices,
+            backbone_params=final_backbone_nd,
+            adapter_indices=adapter_indices,
+            adapter_params=final_adapter_nd,
+        )
 
     final_loss, final_acc = evaluate_global_model(
         global_model, final_params, global_test_loader, device
@@ -470,6 +706,10 @@ def run_async_simulation(
     print(f"  - Total updates: {update_count}")
     print(f"  - Final Loss: {final_loss:.4f}")
     print(f"  - Final Accuracy: {final_acc:.4f}")
+    if phase_enabled:
+        print("  - Updates per phase:")
+        for phase_idx, count in phase_update_counts.items():
+            print(f"    * {phase_names[phase_idx]}: {count}")
     print("=" * 60)
 
     history.add_loss_centralized_async(timestamp=elapsed, loss=final_loss)

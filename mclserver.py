@@ -100,6 +100,11 @@ else:
 if issubclass(StrategyCls, LatencyAwareFedAvg):
     strategy_kwargs["latency_cfg"] = latency_cfg
 
+# Flower's FedProx requires proximal_mu; use config value or a safe fallback.
+strategy_sig = inspect.signature(StrategyCls.__init__)
+if "proximal_mu" in strategy_sig.parameters and "proximal_mu" not in strategy_kwargs:
+    strategy_kwargs["proximal_mu"] = float(cfg.server.get("proximal_mu", 0.0))
+
 strategy = StrategyCls(**strategy_kwargs)
 
 

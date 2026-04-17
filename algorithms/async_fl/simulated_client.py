@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional
 from dataclasses import dataclass
 
 import numpy as np
@@ -42,6 +42,9 @@ class SimulatedClientConfig:
     device: torch.device
     local_epochs: int = 2
     learning_rate: float = 0.01
+    backbone_learning_rate: Optional[float] = None
+    adapter_learning_rate: Optional[float] = None
+    adapter_param_patterns: Optional[List[str]] = None
     simulate_delay: bool = True
     min_delay: float = 0.5
     max_delay: float = 3.0
@@ -63,7 +66,50 @@ class SimulatedAsyncClient(ClientProxy):
         self.device = config.device
         self.local_epochs = config.local_epochs
         self.learning_rate = config.learning_rate
+        self.backbone_learning_rate = (
+            config.backbone_learning_rate
+            if config.backbone_learning_rate is not None
+            else config.learning_rate
+        )
+        self.adapter_learning_rate = (
+            config.adapter_learning_rate
+            if config.adapter_learning_rate is not None
+            else config.learning_rate
+        )
+        self.adapter_param_patterns = list(config.adapter_param_patterns or [])
         self._num_examples = len(config.train_loader.dataset)
+
+    def _is_adapter_param(self, param_name: str) -> bool:
+        return any(
+            param_name == pattern or param_name.startswith(pattern)
+            for pattern in self.adapter_param_patterns
+        )
+
+    def _build_optimizer(self) -> torch.optim.Optimizer:
+        named_params = list(self.model.named_parameters())
+        if not self.adapter_param_patterns:
+            return torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+
+        adapter_params = [
+            p
+            for name, p in named_params
+            if p.requires_grad and self._is_adapter_param(name)
+        ]
+        backbone_params = [
+            p
+            for name, p in named_params
+            if p.requires_grad and not self._is_adapter_param(name)
+        ]
+
+        if not adapter_params or not backbone_params:
+            return torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+
+        return torch.optim.SGD(
+            [
+                {"params": backbone_params, "lr": self.backbone_learning_rate},
+                {"params": adapter_params, "lr": self.adapter_learning_rate},
+            ]
+        )
 
     def get_parameters(
         self, ins: GetParametersIns, timeout: Optional[float] = None
@@ -107,7 +153,7 @@ class SimulatedAsyncClient(ClientProxy):
 
         # Train locally
         self.model.train()
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+        optimizer = self._build_optimizer()
         criterion = torch.nn.CrossEntropyLoss()
 
         total_loss = 0.0
@@ -154,6 +200,7 @@ class SimulatedAsyncClient(ClientProxy):
                 "training_time": elapsed,
                 "start_timestamp": ins.config.get("start_timestamp", start_time),
                 "client_id": self.cid,
+                "phase_idx": int(ins.config.get("phase_idx", 0)),
             },
         )
 
@@ -219,6 +266,9 @@ def create_simulated_clients(
     device: torch.device,
     local_epochs: int = 2,
     learning_rate: float = 0.01,
+    backbone_learning_rate: Optional[float] = None,
+    adapter_learning_rate: Optional[float] = None,
+    adapter_param_patterns: Optional[List[str]] = None,
     simulate_delay: bool = True,
     min_delay: float = 0.5,
     max_delay: float = 3.0,
@@ -233,6 +283,9 @@ def create_simulated_clients(
         device: Torch device for training
         local_epochs: Number of local training epochs
         learning_rate: Learning rate for local training
+        backbone_learning_rate: Slow learning rate for non-adapter params
+        adapter_learning_rate: Fast learning rate for adapter/head params
+        adapter_param_patterns: Parameter name prefixes treated as adapter params
         simulate_delay: Whether to simulate network delays
         min_delay: Minimum simulated delay in seconds
         max_delay: Maximum simulated delay in seconds
@@ -250,6 +303,9 @@ def create_simulated_clients(
             device=device,
             local_epochs=local_epochs,
             learning_rate=learning_rate,
+            backbone_learning_rate=backbone_learning_rate,
+            adapter_learning_rate=adapter_learning_rate,
+            adapter_param_patterns=adapter_param_patterns,
             simulate_delay=simulate_delay,
             min_delay=min_delay,
             max_delay=max_delay,
